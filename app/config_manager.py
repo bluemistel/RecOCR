@@ -2,9 +2,12 @@
 import json
 import os
 
-# プロジェクトルート直下の config.json を使う（実行ディレクトリに依存しない）
-_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-CONFIG_FILE = os.path.join(_ROOT, "config.json")
+from .paths import bundle_dir, data_dir
+
+# 書き込み先（EXE化後は EXE と同じ階層。書けなければ %LOCALAPPDATA%\RecoOCR）
+CONFIG_FILE = os.path.join(data_dir(), "config.json")
+# 同梱されている初期設定（書き込み先に config が無いときの元データ）
+BUNDLED_CONFIG = os.path.join(bundle_dir(), "config.json")
 
 DEFAULTS = {
     "characters": [],
@@ -40,9 +43,11 @@ class ConfigManager:
 
     def load(self) -> dict:
         data = dict(DEFAULTS)
-        if os.path.exists(self.path):
+        # 書き込み先に設定が無ければ、同梱の初期設定を読み込む
+        source = self.path if os.path.exists(self.path) else BUNDLED_CONFIG
+        if os.path.exists(source):
             try:
-                with open(self.path, "r", encoding="utf-8") as f:
+                with open(source, "r", encoding="utf-8") as f:
                     data.update(json.load(f))
             except Exception:
                 pass

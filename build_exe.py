@@ -54,6 +54,22 @@ def _check_environment():
         sys.exit(1)
 
 
+def _write_default_config(path, with_easyocr: bool):
+    """配布用に「初期設定」の config.json を生成する。
+
+    開発環境の config.json（話者名・切り取り座標などの個人設定）は使わない。
+    アプリの既定値（app.config_manager.DEFAULTS）から新規に作る。
+    """
+    import json
+    from app.config_manager import DEFAULTS
+
+    cfg = json.loads(json.dumps(DEFAULTS))  # ネストを含む深いコピー
+    # EasyOCR 非同梱ビルドでは EXE 単体で動くよう Windows OCR を既定にする
+    cfg["ocr_engine"] = "easyocr" if with_easyocr else "windows"
+    path.write_text(json.dumps(cfg, ensure_ascii=False, indent=4) + "\n",
+                    encoding="utf-8")
+
+
 def main():
     with_easyocr = "--with-easyocr" in sys.argv
     _check_environment()
@@ -74,16 +90,9 @@ def main():
 
     dist_dir = ROOT / "dist" / "RecoOCR"
     if dist_dir.exists():
-        import json
-        cfg = json.loads((ROOT / "config.json").read_text(encoding="utf-8"))
-        if not with_easyocr and cfg.get("ocr_engine") == "easyocr":
-            # EasyOCR 非同梱ビルドでは exe 単体で動くよう Windows OCR に切替
-            cfg["ocr_engine"] = "windows"
-            print("注意: EasyOCR 非同梱のため、同梱 config は Windows OCR に設定しました。")
-        (dist_dir / "config.json").write_text(
-            json.dumps(cfg, ensure_ascii=False, indent=4), encoding="utf-8")
+        _write_default_config(dist_dir / "config.json", with_easyocr)
         print(f"\n完了: {dist_dir / 'RecoOCR.exe'}")
-        print("config.json を EXE と同じ階層に配置しました（実行時に読み書きします）。")
+        print("初期設定の config.json を EXE と同じ階層に配置しました（実行時に読み書きします）。")
 
 
 if __name__ == "__main__":

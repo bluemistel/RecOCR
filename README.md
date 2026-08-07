@@ -56,6 +56,11 @@ python main.py
 
 ## 設定（config.json）
 
+設定は実行ファイル（ソース実行時はプロジェクトルート）と同じ階層の `config.json` に保存されます。
+このファイルは個人設定のためリポジトリでは追跡していません。初期値は [`config.example.json`](config.example.json) を参照してください（存在しない場合は既定値で自動生成されます）。
+
+> 実行ファイルの場所に書き込めない場合（`Program Files` 配下、読み取り専用メディア、ウイルス対策ソフトの「フォルダーアクセスの制御」配下など）は、`%LOCALAPPDATA%\RecoOCR` に自動的に退避して保存します。どちらにも書き込めない場合は警告ダイアログを表示します（書き起こしが失われないよう、こまめなエクスポートを推奨）。
+
 | キー | 説明 |
 |---|---|
 | `characters` | 1〜9キーと話者名の対応 |
@@ -81,7 +86,7 @@ venv\Scripts\python.exe -m pip install pyinstaller
 venv\Scripts\python.exe build_exe.py    # -> dist/RecoOCR/RecoOCR.exe
 ```
 
-- 既定は **Windows OCR 版**（約 470MB、torch 非同梱で軽量・安定）。EasyOCR 非同梱ビルドでは、同梱される `config.json` の `ocr_engine` は自動的に `windows` に設定されます。
+- 既定は **Windows OCR 版**（約 470MB、torch 非同梱で軽量・安定）。同梱される `config.json` は開発環境の設定ではなく**アプリの初期設定から生成**されます（EasyOCR 非同梱ビルドでは `ocr_engine` は `windows`）。
 - **EasyOCR も同梱したい場合**（torch 込みで数 GB・ビルドに時間がかかります）:
 
   ```powershell

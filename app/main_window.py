@@ -18,6 +18,7 @@ from PySide6.QtGui import QImage
 from pynput import keyboard
 
 from .config_manager import ConfigManager
+from .paths import data_dir
 from .capture.desktop_capture import CaptureWindow, grab_rect
 from .media.media_player_widget import MediaPlayerWidget
 from .widgets.transcript_table import TranscriptTable
@@ -81,9 +82,9 @@ class MainWindow(QMainWindow):
         self._jobs: dict[int, dict] = {}
         self._in_digit = False   # 数字キー処理の再入ガード
 
-        # 作業状態（書き起こし）の自動保存先
-        _root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        self._session_path = os.path.join(_root, "session.json")
+        # 作業状態（書き起こし）の自動保存先（EXE化後は EXE と同じ階層）
+        self._session_path = os.path.join(data_dir(), "session.json")
+        self._session_error_shown = False
         self._session_timer = QTimer(self)
         self._session_timer.setSingleShot(True)
         self._session_timer.setInterval(500)   # 変更後500msでまとめて保存
@@ -674,6 +675,15 @@ class MainWindow(QMainWindow):
                 json.dump(data, f, ensure_ascii=False, indent=2)
         except Exception as e:
             print(f"[session] save error: {e}")
+            # 保存できないと書き起こしが失われるため、一度だけ明示的に警告する
+            if not self._session_error_shown:
+                self._session_error_shown = True
+                QMessageBox.warning(
+                    self, "自動保存に失敗しました",
+                    f"作業状態を保存できませんでした。\n\n保存先: {self._session_path}\n{e}\n\n"
+                    "書き込み権限のある場所にアプリを配置するか、"
+                    "ウイルス対策ソフトの「フォルダーアクセスの制御」等の設定をご確認ください。\n"
+                    "こまめに CSV/TXT へエクスポートすることを推奨します。")
 
     def _restore_session(self):
         if not os.path.exists(self._session_path):

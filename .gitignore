@@ -8,6 +8,9 @@ dist/
 # 実行時に生成される作業状態（書き起こしの自動保存）
 session.json
 
+# 個人設定（初期値は config.example.json を参照。無ければ既定値で自動生成）
+config.json
+
 # ローカル環境固有
 .claude/settings.local.json
 *.zip

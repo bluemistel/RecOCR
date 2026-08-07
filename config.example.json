@@ -1,0 +1,23 @@
+{
+    "characters": [],
+    "ocr_mode": "numkey",
+    "ocr_engine": "windows",
+    "ocr_lang": "ja",
+    "input_mode": "desktop",
+    "read_mode": "normal",
+    "last_rect": null,
+    "media_region": null,
+    "shortcut_key": "<ctrl>+<alt>+o",
+    "preprocess": {
+        "enabled": false,
+        "upscale": 2,
+        "grayscale": true,
+        "denoise": true,
+        "contrast": true,
+        "binarize": false,
+        "invert": false
+    },
+    "multi_ocr_vote": false,
+    "remove_spaces": false,
+    "correction_mode": "off"
+}
