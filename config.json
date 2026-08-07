@@ -1,0 +1,49 @@
+{
+    "characters": [
+        {
+            "key": "1",
+            "name": "紲星 あかり"
+        },
+        {
+            "key": "2",
+            "name": "琴葉 葵"
+        },
+        {
+            "key": "3",
+            "name": "IA"
+        },
+        {
+            "key": "4",
+            "name": "双葉湊音"
+        },
+        {
+            "key": "5",
+            "name": "星界"
+        }
+    ],
+    "ocr_mode": "numkey",
+    "ocr_engine": "easyocr",
+    "ocr_lang": "ja",
+    "input_mode": "media",
+    "read_mode": "normal",
+    "last_rect": [
+        584,
+        927,
+        1371,
+        130
+    ],
+    "media_region": null,
+    "shortcut_key": "<ctrl>+<alt>+o",
+    "preprocess": {
+        "enabled": true,
+        "upscale": 3,
+        "grayscale": true,
+        "denoise": true,
+        "contrast": true,
+        "binarize": false,
+        "invert": false
+    },
+    "multi_ocr_vote": true,
+    "remove_spaces": false,
+    "correction_mode": "suggest"
+}
