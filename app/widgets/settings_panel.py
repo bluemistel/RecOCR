@@ -30,8 +30,10 @@ class SettingsPanel(QWidget):
 
         layout.addWidget(QLabel("OCRエンジン:"))
         self.engine_combo = QComboBox()
-        self.engine_combo.addItem("Windows OCR（推奨・軽量）", "windows")
-        self.engine_combo.addItem("EasyOCR（要インストール・高精度）", "easyocr")
+        self.engine_combo.addItem("RapidOCR / PP-OCR（推奨・劣化画像に強い）", "rapidocr")
+        self.engine_combo.addItem("RapidOCR / PP-OCR（大きめモデル）", "rapidocr:medium")
+        self.engine_combo.addItem("Windows OCR（軽量・鮮明な画像向き）", "windows")
+        self.engine_combo.addItem("EasyOCR（要インストール・低速）", "easyocr")
         idx = self.engine_combo.findData(config.get("ocr_engine", "windows"))
         if idx >= 0:
             self.engine_combo.setCurrentIndex(idx)

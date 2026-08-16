@@ -12,7 +12,7 @@ BUNDLED_CONFIG = os.path.join(bundle_dir(), "config.json")
 DEFAULTS = {
     "characters": [],
     "ocr_mode": "numkey",       # デスクトップOCR完了時の挙動: clipboard | direct | numkey
-    "ocr_engine": "windows",    # windows | easyocr
+    "ocr_engine": "rapidocr",   # rapidocr | rapidocr:medium | windows | easyocr
     "ocr_lang": "ja",
     "input_mode": "desktop",    # desktop | media
     "read_mode": "normal",      # normal | continuous（メディアモードの読み取り方式）

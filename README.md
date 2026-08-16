@@ -13,7 +13,19 @@
   - **連続モード**: 再生を止めず 1〜9キー押下ごとに「…認識中」行を即挿入し、別プロセスOCRの結果を順次差し替え。
 - **ブックマーク（動画）**: 取り込み時の再生位置を各行に記録。時刻セルをクリックでその位置へシーク。
 - **作業状態の自動保存**: 追加・編集・削除のたびに `session.json` へ自動保存し、次回起動時に復元（クラッシュしても書き起こしは失われません）。「リストクリア」で消去できます。
-- **OCRエンジン**: 既定は **Windows OCR**（軽量・別プロセス起動が速い）。EasyOCR にも切替可能（別途 `pip install easyocr`）。
+- **OCRエンジン（3種切替）**:
+  - **RapidOCR / PP-OCR**（推奨）— PaddleOCR の PP-OCR モデルを ONNX Runtime で実行。torch 不要で軽量。**ディザ・低解像度のゲーム字幕に強い**。
+  - **Windows OCR** — OS 標準。最軽量で、鮮明な画像では最高精度。
+  - **EasyOCR** — 任意（別途 `pip install easyocr`、torch 同梱で重い）。
+
+  簡易ベンチマーク（合成した日本語字幕・文字誤り率 CER、低いほど良い）:
+
+  | 画像の状態 | Windows OCR | RapidOCR |
+  |---|---|---|
+  | 鮮明 | **0.008** | 0.044 |
+  | ディザ・低解像度（実ゲーム字幕相当） | 0.123 | **0.017** |
+
+  劣化した映像では RapidOCR が明確に優位です（Windows OCR が `永遠`→`怺遠` のような誤読をする条件で、RapidOCR は正解）。
 - **前処理オプション（精度優先）**: ドットフォントや小さい文字向けに、拡大・グレースケール・コントラスト強調(CLAHE)・ノイズ除去・二値化・色反転を選択適用（設定タブ）。速度より精度を優先したいときに有効。
 - **日本語校正（非LLM）**: 辞書＋編集距離(RapidFuzz)＋視覚類似字＋**単語バイグラム言語モデル(文脈)** で「永速→永遠」「芳働→労働」「永満→永遠」等の誤認識を補正。設定で **オフ / 候補提示（非破壊）/ 自動修正** を切替。候補提示では該当行を強調し、候補ボタンで採用。正しい語（辞書内）は変更しません。
   - 文脈モデルは Tatoeba 日本語コーパス(約25万文, CC-BY)を Sudachi で解析して構築した単語バイグラム(同梱, 1.1MB)。「永遠に」のような自然な繋がりを優先し、視覚類似だけでは選べない誤りを解消します。
@@ -64,7 +76,7 @@ python main.py
 | キー | 説明 |
 |---|---|
 | `characters` | 1〜9キーと話者名の対応 |
-| `ocr_engine` | `windows`（既定）/ `easyocr` |
+| `ocr_engine` | `rapidocr`（推奨）/ `rapidocr:medium` / `windows` / `easyocr` |
 | `ocr_lang` | `ja` / `en` |
 | `preprocess` | OCR前処理（`enabled`, `upscale`, `grayscale`, `denoise`, `contrast`, `binarize`, `invert`）|
 | `multi_ocr_vote` | 多数決OCR（`true` で複数条件の認識結果を統合・低速）|
@@ -131,6 +143,8 @@ app/
 | [PyWinRT (winrt-*)](https://github.com/pywinrt/pywinrt) | Windows OCR 呼び出し | MIT |
 | [pynput](https://github.com/moses-palmer/pynput) | グローバルホットキー | LGPLv3 |
 | [Pillow](https://python-pillow.org/) / [NumPy](https://numpy.org/) | 画像処理・数値計算 | MIT-CMU / BSD |
+| [RapidOCR](https://github.com/RapidAI/RapidOCR) / [PaddleOCR](https://github.com/PaddlePaddle/PaddleOCR) モデル | OCRエンジン（PP-OCR の ONNX 実行） | Apache License 2.0 |
+| [ONNX Runtime](https://onnxruntime.ai/) | 推論エンジン | MIT |
 | [EasyOCR](https://github.com/JaidedAI/EasyOCR)（任意） | 代替OCRエンジン | Apache License 2.0 |
 | [OpenCV](https://opencv.org/)（任意） | 前処理の高品質化 | Apache License 2.0 |
 

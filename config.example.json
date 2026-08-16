@@ -1,7 +1,7 @@
 {
     "characters": [],
     "ocr_mode": "numkey",
-    "ocr_engine": "windows",
+    "ocr_engine": "rapidocr",
     "ocr_lang": "ja",
     "input_mode": "desktop",
     "read_mode": "normal",

@@ -27,8 +27,9 @@ for pkg in [
     binaries += b
     hiddenimports += h
 
-# 日本語校正の依存（辞書・データファイルを含むため collect_all）
-for pkg in ["sudachipy", "sudachidict_core", "wordfreq", "rapidfuzz"]:
+# OCR / 校正の依存（モデル・辞書などのデータファイルを含むため collect_all）
+for pkg in ["rapidocr", "onnxruntime",
+            "sudachipy", "sudachidict_core", "wordfreq", "rapidfuzz"]:
     try:
         d, b, h = collect_all(pkg)
         datas += d
@@ -56,7 +57,10 @@ if WITH_EASYOCR:
             pass
     excludes = []
 else:
-    excludes = ["easyocr", "torch", "torchvision", "torchaudio", "cv2"]
+    # cv2 は RapidOCR と前処理が使うため除外しない（torch 系のみ外す）。
+    # scipy / skimage は EasyOCR 経由で入るだけで、非同梱ビルドでは未使用。
+    excludes = ["easyocr", "torch", "torchvision", "torchaudio",
+                "scipy", "skimage", "matplotlib", "sklearn", "pandas"]
 
 block_cipher = None
 

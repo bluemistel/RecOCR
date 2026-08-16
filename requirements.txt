@@ -13,6 +13,11 @@ winrt-Windows.Globalization>=3.2
 winrt-Windows.Foundation>=3.2
 winrt-Windows.Foundation.Collections>=3.2
 
+# RapidOCR（PaddleOCR の PP-OCR モデルを ONNX Runtime で実行。torch 不要）
+# ※ PaddleOCR 本家（paddlepaddle）は Python 3.14 向けの配布が無いためこちらを使用
+rapidocr>=3.0
+onnxruntime>=1.20
+
 # 日本語校正（辞書＋編集距離＋視覚類似字）
 rapidfuzz>=3.0
 sudachipy>=0.6

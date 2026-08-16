@@ -25,7 +25,7 @@ ROOT = Path(__file__).parent
 
 # 実行時に import される主要パッケージ（欠けていると exe が動かない）
 REQUIRED = ["PySide6", "pynput", "numpy", "PIL", "rapidfuzz", "sudachipy",
-            "sudachidict_core", "wordfreq", "winrt"]
+            "sudachidict_core", "wordfreq", "winrt", "rapidocr", "onnxruntime"]
 
 
 def _check_environment():
@@ -64,8 +64,8 @@ def _write_default_config(path, with_easyocr: bool):
     from app.config_manager import DEFAULTS
 
     cfg = json.loads(json.dumps(DEFAULTS))  # ネストを含む深いコピー
-    # EasyOCR 非同梱ビルドでは EXE 単体で動くよう Windows OCR を既定にする
-    cfg["ocr_engine"] = "easyocr" if with_easyocr else "windows"
+    # 同梱している RapidOCR を既定にする（EasyOCR は非同梱ビルドでは選べない）
+    cfg["ocr_engine"] = "rapidocr"
     path.write_text(json.dumps(cfg, ensure_ascii=False, indent=4) + "\n",
                     encoding="utf-8")
 
