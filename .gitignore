@@ -5,8 +5,9 @@ build/
 dist/
 *.spec.bak
 
-# 実行時に生成される作業状態（書き起こしの自動保存）
+# 実行時に生成される作業状態（書き起こしの自動保存・1世代前のバックアップ）
 session.json
+session.json.bak
 
 # 個人設定（初期値は config.example.json を参照。無ければ既定値で自動生成）
 config.json

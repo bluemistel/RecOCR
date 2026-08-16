@@ -95,9 +95,13 @@ def main():
         sys.exit(_selftest())
 
     from PySide6.QtWidgets import QApplication
+    from app import theme
     from app.main_window import MainWindow
 
     app = QApplication(sys.argv)
+    app.setStyle("Fusion")            # OS テーマに左右されず配色を統一する
+    app.setPalette(theme.palette())   # チェック記号などは Fusion に描かせる
+    app.setStyleSheet(theme.stylesheet())
     window = MainWindow()
     window.show()
     sys.exit(app.exec())

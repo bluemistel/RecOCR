@@ -9,11 +9,14 @@ from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QColor, QBrush
 
 from ..models.transcript_model import TranscriptRow
+from .. import theme
 
 # 暗い背景でも視認しやすい水色（ブックマーク時刻用）
-TIMESTAMP_COLOR = QColor("#4FD6FF")
-# 校正候補ありの行のハイライト（明るい琥珀・黒文字で両テーマ可読）
-FLAG_BG = QColor("#FFE9A8")
+TIMESTAMP_COLOR = QColor(theme.CYAN)
+# 校正候補ありの行のハイライト（ダークテーマ上で沈まない琥珀寄りの地）
+FLAG_BG = QColor(theme.FLAG_BG)
+FLAG_FG = QColor(theme.FLAG_TEXT)
+TEXT_FG = QColor(theme.TEXT)
 
 COL_SPEAKER = 0
 COL_TEXT = 1
@@ -85,7 +88,7 @@ class TranscriptTable(QTableWidget):
 
         text_item = QTableWidgetItem(PLACEHOLDER if placeholder else (row.text or ""))
         if placeholder:
-            text_item.setForeground(Qt.GlobalColor.gray)
+            text_item.setForeground(QColor(theme.TEXT_MUTED))
         self.setItem(r, COL_TEXT, text_item)
 
         time_item = QTableWidgetItem(TranscriptRow.format_timestamp(row.timestamp_ms))
@@ -122,7 +125,7 @@ class TranscriptTable(QTableWidget):
         self._suppress_change = True
         if on:
             text_item.setBackground(FLAG_BG)
-            text_item.setForeground(Qt.GlobalColor.black)
+            text_item.setForeground(FLAG_FG)
         else:
             text_item.setBackground(QBrush())
             text_item.setForeground(QBrush())
@@ -139,13 +142,15 @@ class TranscriptTable(QTableWidget):
         except RuntimeError:
             return
         text_item.setText(text)
-        text_item.setForeground(Qt.GlobalColor.black)
+        text_item.setForeground(TEXT_FG)
 
     # --- 削除 -------------------------------------------------------
     def _make_delete_widget(self) -> QWidget:
         btn = QPushButton("×")
-        btn.setFixedSize(30, 30)
-        btn.setStyleSheet("color: red; font-weight: bold;")
+        btn.setFixedSize(26, 26)
+        btn.setProperty("rowdelete", True)   # padding を打ち消す専用スタイル
+        btn.setToolTip("この行を削除")
+        btn.setCursor(Qt.CursorShape.PointingHandCursor)
         btn.clicked.connect(self._on_delete_clicked)
         wrapper = QWidget()
         lay = QHBoxLayout(wrapper)

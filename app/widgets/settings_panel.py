@@ -5,9 +5,24 @@ from PySide6.QtWidgets import (QWidget, QVBoxLayout, QLabel, QLineEdit, QComboBo
                                QScrollArea)
 from PySide6.QtCore import Signal, Qt
 
+from .. import theme
+
 
 class SettingsPanel(QWidget):
     settings_saved = Signal()   # 保存後に MainWindow が再設定するためのシグナル
+
+    @staticmethod
+    def _hint(text: str) -> QLabel:
+        lbl = QLabel(text)
+        lbl.setWordWrap(True)
+        lbl.setStyleSheet(f"color:{theme.TEXT_MUTED}; font-size:11px;")
+        return lbl
+
+    @staticmethod
+    def _label(text: str) -> QLabel:
+        lbl = QLabel(text)
+        lbl.setStyleSheet(f"color:{theme.TEXT_DIM}; font-size:12px; font-weight:600;")
+        return lbl
 
     def __init__(self, config, parent=None):
         super().__init__(parent)
@@ -24,31 +39,60 @@ class SettingsPanel(QWidget):
         scroll.setWidget(inner)
         outer.addWidget(scroll)
 
-        layout.addWidget(QLabel("デスクトップOCRのショートカット (例: <ctrl>+<alt>+o):"))
-        self.shortcut_input = QLineEdit(config.get("shortcut_key", "<ctrl>+<alt>+o"))
-        layout.addWidget(self.shortcut_input)
+        layout.setSpacing(12)
 
-        layout.addWidget(QLabel("OCRエンジン:"))
+        # --- 1. 話者（最も使う設定なので先頭に置く） ---
+        spk = QGroupBox("話者キー")
+        spk_l = QVBoxLayout(spk)
+        spk_l.setSpacing(6)
+        spk_l.addWidget(self._hint("1〜9 のキーに話者名を割り当てます。ここで設定した内容が"
+                                   "映像の下にチップとして表示されます。"))
+        self.char_table = QTableWidget(0, 2)
+        self.char_table.setHorizontalHeaderLabels(["キー", "話者名"])
+        self.char_table.horizontalHeader().setSectionResizeMode(
+            1, QHeaderView.ResizeMode.Stretch)
+        self.char_table.setColumnWidth(0, 56)
+        self.char_table.verticalHeader().setVisible(False)
+        self.char_table.setMinimumHeight(160)
+        spk_l.addWidget(self.char_table)
+        btn_row = QHBoxLayout()
+        self.btn_add_char = QPushButton("＋ 話者を追加")
+        self.btn_add_char.clicked.connect(lambda: self.add_char_row())
+        self.btn_del_char = QPushButton("選択行を削除")
+        self.btn_del_char.clicked.connect(self._delete_selected_char)
+        btn_row.addWidget(self.btn_add_char)
+        btn_row.addWidget(self.btn_del_char)
+        spk_l.addLayout(btn_row)
+        layout.addWidget(spk)
+
+        # --- 2. OCR ---
+        ocr = QGroupBox("OCR")
+        ocr_l = QVBoxLayout(ocr)
+        ocr_l.setSpacing(6)
+        ocr_l.addWidget(self._label("認識エンジン"))
         self.engine_combo = QComboBox()
         self.engine_combo.addItem("RapidOCR / PP-OCR（推奨・劣化画像に強い）", "rapidocr")
         self.engine_combo.addItem("Windows OCR（最軽量・鮮明な画像向き）", "windows")
         idx = self.engine_combo.findData(config.get("ocr_engine", "rapidocr"))
         if idx >= 0:
             self.engine_combo.setCurrentIndex(idx)
-        layout.addWidget(self.engine_combo)
-
-        hint_engine = QLabel("※ RapidOCR は日本語・英語を1つのモデルで認識します（言語設定は不要）。")
-        hint_engine.setWordWrap(True)
-        hint_engine.setStyleSheet("color: gray; font-size: 11px;")
-        layout.addWidget(hint_engine)
-
-        layout.addWidget(self._build_preprocess_group())
-
+        ocr_l.addWidget(self.engine_combo)
+        ocr_l.addWidget(self._hint(
+            "RapidOCR は日本語・英語を1つのモデルで認識するため言語設定は不要です。"))
         self.chk_remove_spaces = QCheckBox("認識結果の半角スペースを除去する")
         self.chk_remove_spaces.setChecked(bool(config.get("remove_spaces", False)))
-        layout.addWidget(self.chk_remove_spaces)
+        ocr_l.addWidget(self.chk_remove_spaces)
+        layout.addWidget(ocr)
 
-        layout.addWidget(QLabel("日本語校正（辞書＋類似字による誤認識の修正）:"))
+        # --- 3. 前処理（精度優先） ---
+        layout.addWidget(self._build_preprocess_group())
+
+        # --- 4. 校正 ---
+        corr = QGroupBox("日本語校正")
+        corr_l = QVBoxLayout(corr)
+        corr_l.setSpacing(6)
+        corr_l.addWidget(self._hint(
+            "辞書・類似字・文脈から「永速→永遠」のような誤認識を見つけます。"))
         self.correction_combo = QComboBox()
         self.correction_combo.addItem("オフ", "off")
         self.correction_combo.addItem("候補提示（非破壊・推奨）", "suggest")
@@ -56,27 +100,26 @@ class SettingsPanel(QWidget):
         ci = self.correction_combo.findData(config.get("correction_mode", "off"))
         if ci >= 0:
             self.correction_combo.setCurrentIndex(ci)
-        layout.addWidget(self.correction_combo)
+        corr_l.addWidget(self.correction_combo)
+        layout.addWidget(corr)
 
-        layout.addWidget(QLabel("キャラクター割り当てキー:"))
-        self.char_table = QTableWidget(0, 2)
-        self.char_table.setHorizontalHeaderLabels(["キー (1-9)", "名前"])
-        self.char_table.horizontalHeader().setSectionResizeMode(
-            1, QHeaderView.ResizeMode.Stretch)
-        layout.addWidget(self.char_table)
+        # --- 5. その他 ---
+        misc = QGroupBox("その他")
+        misc_l = QVBoxLayout(misc)
+        misc_l.setSpacing(6)
+        misc_l.addWidget(self._label("デスクトップ切り取りのホットキー"))
+        self.shortcut_input = QLineEdit(config.get("shortcut_key", "<ctrl>+<alt>+o"))
+        misc_l.addWidget(self.shortcut_input)
+        misc_l.addWidget(self._hint("例: <ctrl>+<alt>+o （pynput 形式）"))
+        layout.addWidget(misc)
 
-        btn_row = QHBoxLayout()
-        self.btn_add_char = QPushButton("キャラ追加")
-        self.btn_add_char.clicked.connect(lambda: self.add_char_row())
-        self.btn_del_char = QPushButton("選択行を削除")
-        self.btn_del_char.clicked.connect(self._delete_selected_char)
-        btn_row.addWidget(self.btn_add_char)
-        btn_row.addWidget(self.btn_del_char)
-        layout.addLayout(btn_row)
+        layout.addStretch()
 
-        self.btn_save = QPushButton("設定保存")
+        self.btn_save = QPushButton("設定を保存")
+        self.btn_save.setProperty("accent", True)
+        self.btn_save.setMinimumHeight(42)
         self.btn_save.clicked.connect(self._save)
-        layout.addWidget(self.btn_save)
+        outer.addWidget(self.btn_save)   # スクロールの外に固定して常に押せるように
 
         self._load_characters()
 
@@ -122,7 +165,7 @@ class SettingsPanel(QWidget):
                       "二値化は無地背景向け（模様のある背景では逆効果のことがあります）。"
                       "多数決OCRは前処理条件を変えて複数回認識し、辞書尤度と文字多数決で統合します。")
         hint.setWordWrap(True)
-        hint.setStyleSheet("color: gray; font-size: 11px;")
+        hint.setStyleSheet(f"color:{theme.TEXT_MUTED}; font-size: 11px;")
         v.addWidget(hint)
         return box
 

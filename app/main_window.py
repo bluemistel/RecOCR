@@ -17,6 +17,7 @@ from PySide6.QtGui import QImage
 
 from pynput import keyboard
 
+from . import theme
 from .config_manager import ConfigManager
 from .paths import data_dir
 from .capture.desktop_capture import CaptureWindow, grab_rect
@@ -24,6 +25,8 @@ from .media.media_player_widget import MediaPlayerWidget
 from .widgets.transcript_table import TranscriptTable
 from .widgets.settings_panel import SettingsPanel
 from .widgets.correction_panel import CorrectionPanel
+from .widgets.speaker_bar import SpeakerBar
+from .widgets.status_strip import StatusStrip
 from .correction.corrector import get_corrector
 from .models.transcript_model import TranscriptRow
 from .ocr.base import qimage_to_png_bytes
@@ -163,6 +166,22 @@ class MainWindow(QMainWindow):
         self.media.setMinimumHeight(160)
         self.right_splitter.addWidget(self.media)
 
+        # 映像の直下に「状態」と「話者キー」を集約する（視線の中心に置く）
+        stage = QWidget()
+        stage_layout = QVBoxLayout(stage)
+        stage_layout.setContentsMargins(0, 0, 0, 0)
+        stage_layout.setSpacing(8)
+
+        self.status_strip = StatusStrip()
+        stage_layout.addWidget(self.status_strip)
+
+        self.speaker_bar = SpeakerBar(self.config.characters)
+        self.speaker_bar.speaker_triggered.connect(self._on_speaker_triggered)
+        stage_layout.addWidget(self.speaker_bar)
+        stage.setMaximumHeight(140)
+        self.right_splitter.addWidget(stage)
+        self._stage = stage
+
         self.table = TranscriptTable(self.config.characters)
         self.table.seek_requested.connect(self._on_seek_requested)
         self.table.itemSelectionChanged.connect(self._on_row_selection_changed)
@@ -175,21 +194,26 @@ class MainWindow(QMainWindow):
         self.correction_panel.setMinimumHeight(80)
         self.right_splitter.addWidget(self.correction_panel)
 
-        self.right_splitter.setStretchFactor(0, 3)
-        self.right_splitter.setStretchFactor(1, 2)
-        self.right_splitter.setStretchFactor(2, 1)
+        self.right_splitter.setStretchFactor(0, 3)   # 映像
+        self.right_splitter.setStretchFactor(1, 0)   # 状態＋話者キー（固定気味）
+        self.right_splitter.setStretchFactor(2, 2)   # 書き起こし
+        self.right_splitter.setStretchFactor(3, 1)   # 校正候補
         self.right_splitter.setChildrenCollapsible(False)
         right_layout.addWidget(self.right_splitter, 1)
 
         export_row = QHBoxLayout()
-        self.btn_csv = QPushButton("CSVエクスポート")
-        self.btn_txt = QPushButton("TXTエクスポート")
-        self.btn_clear = QPushButton("リストクリア")
+        export_row.setSpacing(8)
+        self.btn_csv = QPushButton("CSV エクスポート")
+        self.btn_csv.setProperty("accent", True)
+        self.btn_txt = QPushButton("TXT エクスポート")
+        self.btn_clear = QPushButton("リストをクリア")
+        self.btn_clear.setProperty("danger", True)
         self.btn_csv.clicked.connect(lambda: self._export("csv"))
         self.btn_txt.clicked.connect(lambda: self._export("txt"))
         self.btn_clear.clicked.connect(self._clear_list)
         export_row.addWidget(self.btn_csv)
         export_row.addWidget(self.btn_txt)
+        export_row.addStretch()
         export_row.addWidget(self.btn_clear)
         right_layout.addLayout(export_row)
 
@@ -200,34 +224,39 @@ class MainWindow(QMainWindow):
         self.main_splitter.setSizes([340, 660])
         main_layout.addWidget(self.main_splitter)
 
+    @staticmethod
+    def _segment(text: str, tooltip: str = "") -> QPushButton:
+        """モード選択用のセグメントボタン（ラジオより現在値が一目で分かる）。"""
+        b = QPushButton(text)
+        b.setCheckable(True)
+        b.setProperty("segment", True)
+        b.setCursor(Qt.CursorShape.PointingHandCursor)
+        b.setMinimumHeight(36)
+        if tooltip:
+            b.setToolTip(tooltip)
+        return b
+
+    @staticmethod
+    def _hint(text: str) -> QLabel:
+        lbl = QLabel(text)
+        lbl.setWordWrap(True)
+        lbl.setStyleSheet(f"color:{theme.TEXT_MUTED}; font-size:11px;")
+        return lbl
+
     def _build_control_tab(self) -> QWidget:
         tab = QWidget()
         layout = QVBoxLayout(tab)
+        layout.setSpacing(12)
 
-        # ステータス表示 + ピン
-        status_row = QHBoxLayout()
-        self.status_label = QLabel("待機中...")
-        self.status_label.setMinimumHeight(60)
-        self.status_label.setWordWrap(True)
-        self.status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.status_label.setStyleSheet(
-            "QLabel { background-color:#1a1a1a; color:#fff9c4; font-weight:bold;"
-            " font-size:14px; border:2px solid #fff9c4; border-radius:10px; padding:10px; }")
-        self.btn_pin = QPushButton("📌")
-        self.btn_pin.setFixedSize(40, 40)
-        self.btn_pin.setCheckable(True)
-        self.btn_pin.setToolTip("手前に表示を切り替え")
-        self.btn_pin.clicked.connect(self._toggle_always_on_top)
-        status_row.addWidget(self.status_label, 1)
-        status_row.addWidget(self.btn_pin)
-        layout.addLayout(status_row)
-
-        # 入力ソース切替
+        # --- 入力ソース（セグメント切替） ---
         src_box = QGroupBox("入力ソース")
         src_layout = QVBoxLayout()
+        src_layout.setSpacing(6)
         self.src_bg = QButtonGroup(self)
-        self.rb_src_desktop = QRadioButton("デスクトップOCR（画面を切り取り）")
-        self.rb_src_media = QRadioButton("メディア（画像・動画を読み込み）")
+        self.rb_src_desktop = self._segment("デスクトップ画面を読み取る",
+                                            "ホットキーまたはボタンで画面を矩形選択します")
+        self.rb_src_media = self._segment("画像・動画を読み込んで読み取る",
+                                          "ファイルをドラッグ&ドロップでも読み込めます")
         self.src_bg.addButton(self.rb_src_desktop, 0)
         self.src_bg.addButton(self.rb_src_media, 1)
         src_layout.addWidget(self.rb_src_desktop)
@@ -236,27 +265,33 @@ class MainWindow(QMainWindow):
         layout.addWidget(src_box)
         self.src_bg.buttonClicked.connect(self._on_src_changed)
 
-        # --- デスクトップ用コントロール ---
-        self.desktop_box = QGroupBox("デスクトップOCR")
+        # --- デスクトップ ---
+        self.desktop_box = QGroupBox("デスクトップ読み取り")
         d_layout = QVBoxLayout()
-        self.btn_capture = QPushButton("画面切り取り (OCR実行)")
+        d_layout.setSpacing(6)
+        self.btn_capture = QPushButton("画面を切り取って読み取る")
+        self.btn_capture.setProperty("accent", True)
         self.btn_capture.setMinimumHeight(44)
         self.btn_capture.clicked.connect(self.start_capture)
-        self.btn_capture_last = QPushButton("前回の座標で切り取り")
+        self.btn_capture_last = QPushButton("前回と同じ範囲で読み取る")
         self.btn_capture_last.clicked.connect(self.capture_last_rect)
         d_layout.addWidget(self.btn_capture)
         d_layout.addWidget(self.btn_capture_last)
+        d_layout.addWidget(self._hint(
+            f"ホットキー {self.config.get('shortcut_key', '<ctrl>+<alt>+o')} でも実行できます"))
 
+        d_layout.addSpacing(4)
+        d_layout.addWidget(self._hint("読み取った後の動作"))
         self.mode_bg = QButtonGroup(self)
-        self.rb_clipboard = QRadioButton("①クリップボードに格納")
-        self.rb_direct = QRadioButton("②即座にリストに格納")
-        self.rb_numkey = QRadioButton("③数字キー待機（キャラ割当）")
+        self.rb_numkey = self._segment("1〜9 キーで話者を選んで追加",
+                                       "読み取り後にキー入力を待ちます")
+        self.rb_direct = self._segment("話者「未設定」ですぐ追加")
+        self.rb_clipboard = self._segment("クリップボードにコピー")
         self.mode_bg.addButton(self.rb_clipboard, 1)
         self.mode_bg.addButton(self.rb_direct, 2)
         self.mode_bg.addButton(self.rb_numkey, 3)
-        d_layout.addWidget(self.rb_clipboard)
-        d_layout.addWidget(self.rb_direct)
-        d_layout.addWidget(self.rb_numkey)
+        for b in (self.rb_numkey, self.rb_direct, self.rb_clipboard):
+            d_layout.addWidget(b)
         mode = self.config.get("ocr_mode", "numkey")
         {"clipboard": self.rb_clipboard, "direct": self.rb_direct,
          "numkey": self.rb_numkey}.get(mode, self.rb_numkey).setChecked(True)
@@ -264,17 +299,26 @@ class MainWindow(QMainWindow):
         self.desktop_box.setLayout(d_layout)
         layout.addWidget(self.desktop_box)
 
-        # --- メディア用コントロール ---
+        # --- メディア ---
         self.media_box = QGroupBox("メディア読み取り")
         m_layout = QVBoxLayout()
-        self.btn_open = QPushButton("ファイルを開く（画像/動画）")
+        m_layout.setSpacing(6)
+        self.btn_open = QPushButton("画像・動画を開く")
+        self.btn_open.setProperty("accent", True)
+        self.btn_open.setMinimumHeight(44)
         self.btn_open.clicked.connect(self._open_file_dialog)
         m_layout.addWidget(self.btn_open)
-        m_layout.addWidget(QLabel("映像上をドラッグして読み取り領域を指定"))
+        m_layout.addWidget(self._hint(
+            "ドラッグ&ドロップでも読み込めます。映像上をドラッグして読み取り領域を指定"
+            "（ドラッグせずクリックで解除）"))
 
+        m_layout.addSpacing(4)
+        m_layout.addWidget(self._hint("読み取り方"))
         self.read_bg = QButtonGroup(self)
-        self.rb_normal = QRadioButton("通常モード（都度確認・編集）")
-        self.rb_continuous = QRadioButton("連続モード（止めずに連続読み取り）")
+        self.rb_normal = self._segment("通常 — 1件ずつ確認しながら",
+                                       "一時停止して読み取り、内容を確認・修正できます")
+        self.rb_continuous = self._segment("連続 — 再生を止めずに次々と",
+                                           "キーを押すたび行を追加し、認識結果を後から埋めます")
         self.read_bg.addButton(self.rb_normal, 0)
         self.read_bg.addButton(self.rb_continuous, 1)
         m_layout.addWidget(self.rb_normal)
@@ -282,11 +326,17 @@ class MainWindow(QMainWindow):
         rmode = self.config.get("read_mode", "normal")
         (self.rb_continuous if rmode == "continuous" else self.rb_normal).setChecked(True)
         self.read_bg.buttonClicked.connect(self._save_read_mode)
-        m_layout.addWidget(QLabel("再生中/一時停止中に 1〜9 キーで話者を選んで読み取り"))
         self.media_box.setLayout(m_layout)
         layout.addWidget(self.media_box)
 
         layout.addStretch()
+
+        # 最前面表示トグル
+        self.btn_pin = QPushButton("📌  常に手前に表示")
+        self.btn_pin.setCheckable(True)
+        self.btn_pin.setProperty("segment", True)
+        self.btn_pin.clicked.connect(self._toggle_always_on_top)
+        layout.addWidget(self.btn_pin)
         return tab
 
     # ================================================================
@@ -303,10 +353,32 @@ class MainWindow(QMainWindow):
         self.desktop_box.setVisible(not is_media)
         self.media_box.setVisible(is_media)
         self.media.setVisible(is_media)
+        # メディア固有の前提条件（読み込み/領域）はメディアモードでのみ意味を持つ
+        self.status_strip.set_indicators_visible(is_media)
         if is_media:
-            self.status_label.setText("メディアを読み込んでください（ドラッグ&ドロップ可）")
+            self.status_strip.set_message("画像・動画を読み込んでください（ドラッグ&ドロップ可）")
         else:
-            self.status_label.setText("待機中...")
+            self.status_strip.set_message("画面を切り取って読み取れます")
+        self._refresh_state_indicators()
+
+    def _refresh_state_indicators(self):
+        """スタータス右側のインジケータ（メディア/領域/モード）を現在値に同期する。"""
+        is_media = self.config.get("input_mode") == "media"
+        if is_media:
+            path = self.media.current_path()
+            self.status_strip.set_media(self.media.has_media(),
+                                        os.path.basename(path) if path else "")
+            rect = self.media.region()
+            self.status_strip.set_region(
+                rect is not None,
+                f"{rect.width()}×{rect.height()}" if rect is not None else "")
+            self.status_strip.set_mode(
+                "連続" if self.config.get("read_mode") == "continuous" else "通常")
+        else:
+            mode = self.config.get("ocr_mode", "numkey")
+            self.status_strip.set_mode(
+                {"numkey": "1〜9キー", "direct": "即追加",
+                 "clipboard": "クリップボード"}.get(mode, mode))
 
     def _save_ocr_mode(self):
         if self.rb_clipboard.isChecked():
@@ -315,10 +387,21 @@ class MainWindow(QMainWindow):
             self.config.set("ocr_mode", "numkey")
         else:
             self.config.set("ocr_mode", "direct")
+        self._refresh_state_indicators()
 
     def _save_read_mode(self):
         self.config.set("read_mode",
                         "continuous" if self.rb_continuous.isChecked() else "normal")
+        self._refresh_state_indicators()
+
+    def _on_speaker_triggered(self, key: str):
+        """話者チップのクリック（キー押下と同じ動作）。"""
+        if self.config.get("input_mode") == "media":
+            self.speaker_bar.flash(key)
+            self._handle_media_digit(key)
+        elif self.waiting_for_key:
+            self.speaker_bar.flash(key)
+            self._commit_waiting_key(key)
 
     # ================================================================
     # デスクトップOCR
@@ -369,30 +452,30 @@ class MainWindow(QMainWindow):
 
     def _submit_desktop_ocr(self, image: QImage):
         if image is None or image.isNull():
-            self.status_label.setText("画像の取得に失敗しました。")
+            self.status_strip.set_message("画像の取得に失敗しました", "error")
             return
         seq = self.dispatcher.submit(qimage_to_png_bytes(image), self.config.get("preprocess"),
                                      self.config.get("multi_ocr_vote", False))
         self._jobs[seq] = {"kind": "desktop"}
-        self.status_label.setText("認識中...")
+        self.status_strip.set_message("認識中…", "busy")
 
     def handle_ocr_result(self, text: str):
         """デスクトップOCR結果の後処理（clipboard/direct/numkey）。"""
         self.last_ocr_text = text
         mode = self.config.get("ocr_mode", "numkey")
         if not text:
-            self.status_label.setText("文字を認識できませんでした。")
+            self.status_strip.set_message("文字を認識できませんでした", "error")
             return
         if mode == "clipboard":
             QApplication.clipboard().setText(text)
-            self.status_label.setText("クリップボードにコピーしました。")
+            self.status_strip.set_message("クリップボードにコピーしました", "ok")
         elif mode == "direct":
             item = self.table.add_row(TranscriptRow("未設定", text))
             self._handle_new_text(item, text)
-            self.status_label.setText("リストに追加しました。")
+            self.status_strip.set_message("リストに追加しました", "ok")
         elif mode == "numkey":
             self.waiting_for_key = True
-            self.status_label.setText(f"『{text}』…対応する数字キー(1-9)を押してください。")
+            self.status_strip.set_message(f"『{text}』…対応する数字キー(1-9)を押してください。")
             self.activateWindow()
 
     # ================================================================
@@ -426,13 +509,14 @@ class MainWindow(QMainWindow):
 
     def _handle_media_digit(self, key: str):
         if not self.media.has_media():
-            self.status_label.setText("先にメディアを読み込んでください。")
+            self.status_strip.set_message("先に画像・動画を読み込んでください", "error")
             return
         image = self.media.grab_region_image()
         if image is None or image.isNull():
-            self.status_label.setText("読み取り領域または画像がありません。")
+            self.status_strip.set_message("映像上をドラッグして読み取り領域を指定してください", "error")
             return
         speaker = self._resolve_speaker(key)
+        self.speaker_bar.flash(key)          # どのキーが効いたかを視覚的に返す
         pos = self.media.current_position_ms() if self.media.is_video() else None
         png = qimage_to_png_bytes(image)
         opts = self.config.get("preprocess")
@@ -442,11 +526,11 @@ class MainWindow(QMainWindow):
             item = self.table.add_row(TranscriptRow(speaker, "", pos), placeholder=True)
             seq = self.dispatcher.submit(png, opts, vote)
             self._jobs[seq] = {"kind": "cont", "item": item}
-            self.status_label.setText(f"{speaker}: 連続読み取り中…")
+            self.status_strip.set_message(f"{speaker} … 連続読み取り中", "busy")
         else:
             seq = self.dispatcher.submit(png, opts, vote)
             self._jobs[seq] = {"kind": "normal", "speaker": speaker, "ts": pos}
-            self.status_label.setText(f"{speaker}: 認識中…")
+            self.status_strip.set_message(f"{speaker} … 認識中", "busy")
 
     # ================================================================
     # OCR 結果受信（別スレッド→キュー接続でUIスレッド）
@@ -468,7 +552,7 @@ class MainWindow(QMainWindow):
         elif kind == "normal":
             item = self.table.add_row(TranscriptRow(job["speaker"], text, job["ts"]))
             self._handle_new_text(item, text)
-            self.status_label.setText(f"{job['speaker']} をリストに追加しました。")
+            self.status_strip.set_message(f"{job['speaker']} を追加しました", "ok")
         elif kind == "cont":
             self.table.set_text_for_item(job["item"], text or "")
             self._handle_new_text(job["item"], text or "")
@@ -477,7 +561,7 @@ class MainWindow(QMainWindow):
         job = self._jobs.pop(seq, None)
         if job and job.get("kind") == "cont":
             self.table.set_text_for_item(job["item"], "[OCR失敗]")
-        self.status_label.setText(f"OCRエラー: {msg}")
+        self.status_strip.set_message(f"OCRエラー: {msg}", "error")
 
     # ================================================================
     # 日本語校正
@@ -539,15 +623,18 @@ class MainWindow(QMainWindow):
     # メディア関連コールバック
     # ================================================================
     def _on_region_selected(self, rect: QRect):
-        self.status_label.setText(
-            f"読み取り領域を設定しました（{rect.width()}×{rect.height()}）。1〜9キーで読み取り。")
+        self.status_strip.set_message("準備完了 — 1〜9 キー（または下のチップ）で読み取り", "ok")
+        self._refresh_state_indicators()
 
     def _on_region_cleared(self):
-        self.status_label.setText("読み取り領域を解除しました（クリックでキャンセル）。")
+        self.status_strip.set_message("読み取り領域を解除しました — ドラッグで指定し直せます")
+        self._refresh_state_indicators()
 
     def _on_media_loaded(self, is_video: bool):
         kind = "動画" if is_video else "画像"
-        self.status_label.setText(f"{kind}を読み込みました。映像上をドラッグして領域指定してください。")
+        self.status_strip.set_message(
+            f"{kind}を読み込みました — 映像上をドラッグして読み取り領域を指定してください")
+        self._refresh_state_indicators()
 
     def _on_seek_requested(self, ms: int):
         # 一時停止中はそのまま（再生開始しない）。再生中はそのまま再生を継続。
@@ -592,15 +679,20 @@ class MainWindow(QMainWindow):
     # ================================================================
     # キーボード（デスクトップ numkey）※メディア digit は _DigitKeyFilter で処理
     # ================================================================
+    def _commit_waiting_key(self, key_text: str):
+        """デスクトップOCRの数字キー待機を確定する。"""
+        speaker = self._resolve_speaker(key_text)
+        item = self.table.add_row(TranscriptRow(speaker, self.last_ocr_text))
+        self._handle_new_text(item, self.last_ocr_text)
+        self.waiting_for_key = False
+        self.status_strip.set_message(f"{speaker} を追加しました", "ok")
+
     def keyPressEvent(self, event):
         if self.waiting_for_key:
             key_text = event.text()
             if key_text.isdigit():
-                speaker = self._resolve_speaker(key_text)
-                item = self.table.add_row(TranscriptRow(speaker, self.last_ocr_text))
-                self._handle_new_text(item, self.last_ocr_text)
-                self.waiting_for_key = False
-                self.status_label.setText(f"{speaker} としてリストに追加しました。")
+                self.speaker_bar.flash(key_text)
+                self._commit_waiting_key(key_text)
                 return
         super().keyPressEvent(event)
 
@@ -611,6 +703,8 @@ class MainWindow(QMainWindow):
         self.setup_hotkey()
         self.table.set_characters(self.config.characters)
         self.table.update_all_comboboxes()
+        self.speaker_bar.set_characters(self.config.characters)
+        self._refresh_state_indicators()
         # エンジン/言語が変わった可能性 → プール作り直し
         self.dispatcher.restart(self.config.get("ocr_engine", "windows"),
                                 self.config.get("ocr_lang", "ja"))
@@ -671,6 +765,14 @@ class MainWindow(QMainWindow):
                 "input_mode": self.config.get("input_mode", "desktop"),
                 "media_path": self.media.current_path(),
             }
+            # 直前の内容を .bak に退避してから書く。
+            # 誤って全消し・上書きしても1世代前に戻せるようにする。
+            if os.path.exists(self._session_path):
+                try:
+                    import shutil
+                    shutil.copyfile(self._session_path, self._session_path + ".bak")
+                except Exception:
+                    pass
             with open(self._session_path, "w", encoding="utf-8") as f:
                 json.dump(data, f, ensure_ascii=False, indent=2)
         except Exception as e:
@@ -712,7 +814,7 @@ class MainWindow(QMainWindow):
         if media_restored:
             msgs.append(os.path.basename(media_path))
         if msgs:
-            self.status_label.setText("前回の作業状態を復元しました（" + " / ".join(msgs) + "）。")
+            self.status_strip.set_message("前回の作業状態を復元しました（" + " / ".join(msgs) + "）。")
 
     def _check_ocr_availability(self):
         engine = self.config.get("ocr_engine", "windows")
