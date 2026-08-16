@@ -6,6 +6,7 @@ from PySide6.QtWidgets import (QWidget, QVBoxLayout, QLabel, QLineEdit, QComboBo
 from PySide6.QtCore import Signal, Qt
 
 from .. import theme
+from .collapsible import CollapsibleSection
 
 
 class SettingsPanel(QWidget):
@@ -27,6 +28,8 @@ class SettingsPanel(QWidget):
     def __init__(self, config, parent=None):
         super().__init__(parent)
         self.config = config
+        self._dirty = False
+        self._loading = True   # 初期化中の変更を dirty 扱いしない
 
         # 項目が多いのでスクロール可能にする
         outer = QVBoxLayout(self)
@@ -39,9 +42,19 @@ class SettingsPanel(QWidget):
         scroll.setWidget(inner)
         outer.addWidget(scroll)
 
-        layout.setSpacing(12)
+        layout.setSpacing(10)
 
-        # --- 1. 話者（最も使う設定なので先頭に置く） ---
+        # --- 0. ホットキー（先頭に配置） ---
+        hk = QGroupBox("ホットキー")
+        hk_l = QVBoxLayout(hk)
+        hk_l.setSpacing(6)
+        hk_l.addWidget(self._label("デスクトップ切り取り"))
+        self.shortcut_input = QLineEdit(config.get("shortcut_key", "<ctrl>+<alt>+o"))
+        hk_l.addWidget(self.shortcut_input)
+        hk_l.addWidget(self._hint("例: <ctrl>+<alt>+o （pynput 形式）"))
+        layout.addWidget(hk)
+
+        # --- 1. 話者 ---
         spk = QGroupBox("話者キー")
         spk_l = QVBoxLayout(spk)
         spk_l.setSpacing(6)
@@ -84,13 +97,18 @@ class SettingsPanel(QWidget):
         ocr_l.addWidget(self.chk_remove_spaces)
         layout.addWidget(ocr)
 
-        # --- 3. 前処理（精度優先） ---
-        layout.addWidget(self._build_preprocess_group())
+        # --- 3. 前処理（既定では畳んでおく。無くても実用上ほぼ問題ないため） ---
+        self.sec_preprocess = CollapsibleSection(
+            "OCR前処理（精度優先・速度低下）",
+            expanded=bool(config.get("ui_expand_preprocess", False)))
+        self._fill_preprocess(self.sec_preprocess.body_layout())
+        layout.addWidget(self.sec_preprocess)
 
-        # --- 4. 校正 ---
-        corr = QGroupBox("日本語校正")
-        corr_l = QVBoxLayout(corr)
-        corr_l.setSpacing(6)
+        # --- 4. 校正（同上） ---
+        self.sec_correction = CollapsibleSection(
+            "日本語校正",
+            expanded=bool(config.get("ui_expand_correction", False)))
+        corr_l = self.sec_correction.body_layout()
         corr_l.addWidget(self._hint(
             "辞書・類似字・文脈から「永速→永遠」のような誤認識を見つけます。"))
         self.correction_combo = QComboBox()
@@ -101,32 +119,30 @@ class SettingsPanel(QWidget):
         if ci >= 0:
             self.correction_combo.setCurrentIndex(ci)
         corr_l.addWidget(self.correction_combo)
-        layout.addWidget(corr)
+        layout.addWidget(self.sec_correction)
 
-        # --- 5. その他 ---
-        misc = QGroupBox("その他")
-        misc_l = QVBoxLayout(misc)
-        misc_l.setSpacing(6)
-        misc_l.addWidget(self._label("デスクトップ切り取りのホットキー"))
-        self.shortcut_input = QLineEdit(config.get("shortcut_key", "<ctrl>+<alt>+o"))
-        misc_l.addWidget(self.shortcut_input)
-        misc_l.addWidget(self._hint("例: <ctrl>+<alt>+o （pynput 形式）"))
-        layout.addWidget(misc)
+        # 折りたたみ状態を覚えておく
+        self.sec_preprocess.toggled.connect(
+            lambda v: self.config.set("ui_expand_preprocess", v))
+        self.sec_correction.toggled.connect(
+            lambda v: self.config.set("ui_expand_correction", v))
 
         layout.addStretch()
 
         self.btn_save = QPushButton("設定を保存")
-        self.btn_save.setProperty("accent", True)
         self.btn_save.setMinimumHeight(42)
         self.btn_save.clicked.connect(self._save)
         outer.addWidget(self.btn_save)   # スクロールの外に固定して常に押せるように
 
         self._load_characters()
+        # 変更があったときだけ保存ボタンを強調する（押し時が分かるように）
+        self._loading = False
+        self._connect_dirty_watchers()
+        self._set_dirty(False)
 
-    def _build_preprocess_group(self) -> QGroupBox:
+    def _fill_preprocess(self, target_layout) -> None:
         pre = self.config.get("preprocess") or {}
-        box = QGroupBox("OCR前処理（精度優先・速度低下）")
-        v = QVBoxLayout(box)
+        v = target_layout
 
         self.chk_pre_enabled = QCheckBox("前処理を有効にする")
         self.chk_pre_enabled.setChecked(bool(pre.get("enabled", False)))
@@ -167,7 +183,33 @@ class SettingsPanel(QWidget):
         hint.setWordWrap(True)
         hint.setStyleSheet(f"color:{theme.TEXT_MUTED}; font-size: 11px;")
         v.addWidget(hint)
-        return box
+
+    # --- 未保存の変更を追跡して保存ボタンを強調する -------------------
+    def _connect_dirty_watchers(self):
+        mark = self._mark_dirty
+        self.shortcut_input.textChanged.connect(lambda *_: mark())
+        for combo in (self.engine_combo, self.correction_combo, self.upscale_combo):
+            combo.currentIndexChanged.connect(lambda *_: mark())
+        for chk in (self.chk_remove_spaces, self.chk_pre_enabled, self.chk_grayscale,
+                    self.chk_denoise, self.chk_contrast, self.chk_binarize,
+                    self.chk_invert, self.chk_vote):
+            chk.toggled.connect(lambda *_: mark())
+        self.char_table.itemChanged.connect(lambda *_: mark())
+        self.char_table.model().rowsInserted.connect(lambda *_: mark())
+        self.char_table.model().rowsRemoved.connect(lambda *_: mark())
+
+    def _mark_dirty(self):
+        if not self._loading:
+            self._set_dirty(True)
+
+    def _set_dirty(self, dirty: bool):
+        self._dirty = dirty
+        self.btn_save.setProperty("accent", dirty)
+        self.btn_save.setText("設定を保存 ●" if dirty else "設定を保存")
+        self.btn_save.setToolTip("未保存の変更があります" if dirty else "変更はありません")
+        # プロパティ変更を反映させるためスタイルを再適用する
+        self.btn_save.style().unpolish(self.btn_save)
+        self.btn_save.style().polish(self.btn_save)
 
     def _preprocess_from_ui(self) -> dict:
         return {
@@ -214,4 +256,5 @@ class SettingsPanel(QWidget):
                 chars.append({"key": key_item.text().strip(),
                               "name": name_item.text().strip()})
         self.config.set("characters", chars, save=True)
+        self._set_dirty(False)      # 保存済みなのでハイライトを消す
         self.settings_saved.emit()

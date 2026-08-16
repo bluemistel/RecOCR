@@ -31,6 +31,12 @@ DEFAULTS = {
     "multi_ocr_vote": False,     # 複数条件の多数決OCR（低速・高精度）
     "remove_spaces": False,      # 認識結果の半角スペースを除去
     "correction_mode": "off",   # 日本語校正: off | suggest（候補提示）| auto（自動修正）
+    # UI の折りたたみ状態（普段触らない項目は畳んでおく）
+    "ui_expand_preprocess": False,
+    "ui_expand_correction": False,
+    "ui_expand_desktop": True,
+    "ui_expand_media": True,
+    "last_project": None,       # 最後に開いていたプロジェクト(.recoocr.json)
 }
 
 
@@ -40,6 +46,9 @@ class ConfigManager:
     def __init__(self, path: str = CONFIG_FILE):
         self.path = path
         self.data = self.load()
+
+    # 現在サポートしている OCR エンジン（これ以外は既定へ移行する）
+    VALID_ENGINES = ("rapidocr", "windows")
 
     def load(self) -> dict:
         data = dict(DEFAULTS)
@@ -51,6 +60,14 @@ class ConfigManager:
                     data.update(json.load(f))
             except Exception:
                 pass
+        return self._migrate(data)
+
+    def _migrate(self, data: dict) -> dict:
+        """古い設定値を現在の仕様へ移行する。"""
+        engine = str(data.get("ocr_engine", "") or "")
+        # easyocr など削除済みのエンジンが残っていたら既定へ戻す
+        if engine not in self.VALID_ENGINES and not engine.startswith("rapidocr:"):
+            data["ocr_engine"] = DEFAULTS["ocr_engine"]
         return data
 
     def save(self) -> None:

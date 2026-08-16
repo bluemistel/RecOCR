@@ -18,6 +18,8 @@ from PySide6.QtGui import QImage
 from pynput import keyboard
 
 from . import theme
+from . import project
+from .project import Project
 from .config_manager import ConfigManager
 from .paths import data_dir
 from .capture.desktop_capture import CaptureWindow, grab_rect
@@ -27,6 +29,7 @@ from .widgets.settings_panel import SettingsPanel
 from .widgets.correction_panel import CorrectionPanel
 from .widgets.speaker_bar import SpeakerBar
 from .widgets.status_strip import StatusStrip
+from .widgets.collapsible import CollapsibleSection
 from .correction.corrector import get_corrector
 from .models.transcript_model import TranscriptRow
 from .ocr.base import qimage_to_png_bytes
@@ -85,8 +88,9 @@ class MainWindow(QMainWindow):
         self._jobs: dict[int, dict] = {}
         self._in_digit = False   # 数字キー処理の再入ガード
 
-        # 作業状態（書き起こし）の自動保存先（EXE化後は EXE と同じ階層）
-        self._session_path = os.path.join(data_dir(), "session.json")
+        # プロジェクト（未保存なら session.json、保存済みならそのファイルへ自動保存）
+        self.project = Project()
+        self._session_path = self.project.storage_path()
         self._session_error_shown = False
         self._session_timer = QTimer(self)
         self._session_timer.setSingleShot(True)
@@ -95,7 +99,7 @@ class MainWindow(QMainWindow):
 
         # OCR ディスパッチャ（別プロセス）
         self.dispatcher = OcrDispatcher(
-            engine_name=self.config.get("ocr_engine", "windows"),
+            engine_name=self.config.get("ocr_engine", "rapidocr"),
             lang=self.config.get("ocr_lang", "ja"),
             max_workers=2,
         )
@@ -175,9 +179,20 @@ class MainWindow(QMainWindow):
         self.status_strip = StatusStrip()
         stage_layout.addWidget(self.status_strip)
 
+        # 話者キー列（右端にリスト操作を固定配置する）
+        speaker_row = QHBoxLayout()
+        speaker_row.setContentsMargins(0, 0, 0, 0)
+        speaker_row.setSpacing(8)
         self.speaker_bar = SpeakerBar(self.config.characters)
         self.speaker_bar.speaker_triggered.connect(self._on_speaker_triggered)
-        stage_layout.addWidget(self.speaker_bar)
+        speaker_row.addWidget(self.speaker_bar, 1)
+
+        self.btn_clear = QPushButton("リストをクリア")
+        self.btn_clear.setProperty("danger", True)
+        self.btn_clear.setToolTip("書き起こしリストを空にします")
+        self.btn_clear.clicked.connect(self._clear_list)
+        speaker_row.addWidget(self.btn_clear, 0, Qt.AlignmentFlag.AlignBottom)
+        stage_layout.addLayout(speaker_row)
         stage.setMaximumHeight(140)
         self.right_splitter.addWidget(stage)
         self._stage = stage
@@ -201,20 +216,20 @@ class MainWindow(QMainWindow):
         self.right_splitter.setChildrenCollapsible(False)
         right_layout.addWidget(self.right_splitter, 1)
 
+        # 書き出し操作（リスト操作は話者キー列の右端に移したのでここは書き出しのみ）
         export_row = QHBoxLayout()
         export_row.setSpacing(8)
         self.btn_csv = QPushButton("CSV エクスポート")
-        self.btn_csv.setProperty("accent", True)
         self.btn_txt = QPushButton("TXT エクスポート")
-        self.btn_clear = QPushButton("リストをクリア")
-        self.btn_clear.setProperty("danger", True)
+        self.btn_sort = QPushButton("時刻順にソート")
+        self.btn_sort.setToolTip("リストを時刻の昇順に並び替えます（確認あり）")
         self.btn_csv.clicked.connect(lambda: self._export("csv"))
         self.btn_txt.clicked.connect(lambda: self._export("txt"))
-        self.btn_clear.clicked.connect(self._clear_list)
+        self.btn_sort.clicked.connect(self._sort_by_time)
         export_row.addWidget(self.btn_csv)
         export_row.addWidget(self.btn_txt)
+        export_row.addWidget(self.btn_sort)
         export_row.addStretch()
-        export_row.addWidget(self.btn_clear)
         right_layout.addLayout(export_row)
 
         self.main_splitter.addWidget(right)
@@ -248,6 +263,30 @@ class MainWindow(QMainWindow):
         layout = QVBoxLayout(tab)
         layout.setSpacing(12)
 
+        # --- プロジェクト（最上段） ---
+        proj_box = QGroupBox("プロジェクト")
+        p_layout = QVBoxLayout(proj_box)
+        p_layout.setSpacing(6)
+        self.project_label = QLabel(project.UNTITLED)
+        self.project_label.setStyleSheet(
+            f"color:{theme.ACCENT}; font-weight:700; font-size:13px;")
+        self.project_label.setWordWrap(True)
+        p_layout.addWidget(self.project_label)
+        p_row1 = QHBoxLayout()
+        self.btn_proj_open = QPushButton("開く")
+        self.btn_proj_open.clicked.connect(self._project_open)
+        self.btn_proj_save = QPushButton("名前を付けて保存")
+        self.btn_proj_save.clicked.connect(self._project_save_as)
+        p_row1.addWidget(self.btn_proj_open)
+        p_row1.addWidget(self.btn_proj_save)
+        p_layout.addLayout(p_row1)
+        self.btn_proj_close = QPushButton("プロジェクトを閉じる")
+        self.btn_proj_close.clicked.connect(self._project_close)
+        p_layout.addWidget(self.btn_proj_close)
+        p_layout.addWidget(self._hint(
+            "未保存のあいだは「新しいプロジェクト」として自動保存されます。"))
+        layout.addWidget(proj_box)
+
         # --- 入力ソース（セグメント切替） ---
         src_box = QGroupBox("入力ソース")
         src_layout = QVBoxLayout()
@@ -266,9 +305,12 @@ class MainWindow(QMainWindow):
         self.src_bg.buttonClicked.connect(self._on_src_changed)
 
         # --- デスクトップ ---
-        self.desktop_box = QGroupBox("デスクトップ読み取り")
-        d_layout = QVBoxLayout()
-        d_layout.setSpacing(6)
+        self.desktop_box = CollapsibleSection(
+            "デスクトップ読み取り",
+            expanded=bool(self.config.get("ui_expand_desktop", True)))
+        self.desktop_box.toggled.connect(
+            lambda v: self.config.set("ui_expand_desktop", v))
+        d_layout = self.desktop_box.body_layout()
         self.btn_capture = QPushButton("画面を切り取って読み取る")
         self.btn_capture.setProperty("accent", True)
         self.btn_capture.setMinimumHeight(44)
@@ -296,13 +338,15 @@ class MainWindow(QMainWindow):
         {"clipboard": self.rb_clipboard, "direct": self.rb_direct,
          "numkey": self.rb_numkey}.get(mode, self.rb_numkey).setChecked(True)
         self.mode_bg.buttonClicked.connect(self._save_ocr_mode)
-        self.desktop_box.setLayout(d_layout)
         layout.addWidget(self.desktop_box)
 
         # --- メディア ---
-        self.media_box = QGroupBox("メディア読み取り")
-        m_layout = QVBoxLayout()
-        m_layout.setSpacing(6)
+        self.media_box = CollapsibleSection(
+            "メディア読み取り",
+            expanded=bool(self.config.get("ui_expand_media", True)))
+        self.media_box.toggled.connect(
+            lambda v: self.config.set("ui_expand_media", v))
+        m_layout = self.media_box.body_layout()
         self.btn_open = QPushButton("画像・動画を開く")
         self.btn_open.setProperty("accent", True)
         self.btn_open.setMinimumHeight(44)
@@ -326,7 +370,6 @@ class MainWindow(QMainWindow):
         rmode = self.config.get("read_mode", "normal")
         (self.rb_continuous if rmode == "continuous" else self.rb_normal).setChecked(True)
         self.read_bg.buttonClicked.connect(self._save_read_mode)
-        self.media_box.setLayout(m_layout)
         layout.addWidget(self.media_box)
 
         layout.addStretch()
@@ -706,7 +749,7 @@ class MainWindow(QMainWindow):
         self.speaker_bar.set_characters(self.config.characters)
         self._refresh_state_indicators()
         # エンジン/言語が変わった可能性 → プール作り直し
-        self.dispatcher.restart(self.config.get("ocr_engine", "windows"),
+        self.dispatcher.restart(self.config.get("ocr_engine", "rapidocr"),
                                 self.config.get("ocr_lang", "ja"))
         # 校正: 言語追従・表示切替・ウォームアップ
         self.corrector = get_corrector(self.config.get("ocr_lang", "ja"))
@@ -756,27 +799,112 @@ class MainWindow(QMainWindow):
         # 変更のたびに呼ばれるので、500ms のデバウンスでまとめて書き込む
         self._session_timer.start()
 
+    # ================================================================
+    # プロジェクト
+    # ================================================================
+    def _update_project_label(self):
+        name = self.project.name
+        self.project_label.setText(name if self.project.is_saved else f"{name}（未保存）")
+        self.project_label.setToolTip(self.project.path or "まだ名前を付けていません")
+        self.btn_proj_close.setEnabled(self.project.is_saved)
+
+    def _project_open(self):
+        path, _ = QFileDialog.getOpenFileName(
+            self, "プロジェクトを開く", project.default_dir(),
+            f"RecoOCR プロジェクト (*{project.EXT});;すべて (*.*)")
+        if not path:
+            return
+        try:
+            data = project.read(path)
+        except Exception as e:
+            QMessageBox.critical(self, "エラー", f"プロジェクトを開けませんでした:\n{e}")
+            return
+        # 現在の内容を保存してから切り替える（取りこぼし防止）
+        self._write_session()
+        self.project.open(path)
+        self.config.set("last_project", path)
+        self.table.setRowCount(0)
+        for r in data.get("rows", []):
+            self.table.add_row(TranscriptRow(
+                r.get("speaker", "未設定"), r.get("text", ""), r.get("timestamp_ms")))
+        media_path = data.get("media_path")
+        if media_path and os.path.exists(media_path) and self.media.is_supported(media_path):
+            self._load_media(media_path)
+        self._session_path = self.project.storage_path()
+        self._update_project_label()
+        self.status_strip.set_message(f"プロジェクト「{self.project.name}」を開きました", "ok")
+
+    def _project_save_as(self):
+        default = os.path.join(project.default_dir(),
+                               (self.project.name if self.project.is_saved else "project") + project.EXT)
+        path, _ = QFileDialog.getSaveFileName(
+            self, "プロジェクトに名前を付けて保存", default,
+            f"RecoOCR プロジェクト (*{project.EXT})")
+        if not path:
+            return
+        path = self.project.save_as(path)
+        self.config.set("last_project", path)
+        self._session_path = path
+        self._write_session()
+        self._update_project_label()
+        self.status_strip.set_message(f"「{self.project.name}」として保存しました", "ok")
+
+    def _project_close(self):
+        if not self.project.is_saved:
+            return
+        if QMessageBox.question(
+                self, "プロジェクトを閉じる",
+                f"「{self.project.name}」を閉じます。\n"
+                "リストは空になり、未保存の状態に戻ります。よろしいですか？",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No) != QMessageBox.StandardButton.Yes:
+            return
+        self._write_session()          # 閉じる前に現在の内容を確定保存
+        self.project.close()
+        self.config.set("last_project", None)
+        self.table.setRowCount(0)
+        self._session_path = self.project.storage_path()
+        self._update_project_label()
+        self.status_strip.set_message("プロジェクトを閉じました（新しいプロジェクト）")
+
+    # ================================================================
+    # リスト操作
+    # ================================================================
+    def _sort_by_time(self):
+        rows = self.table.to_rows()
+        if not rows:
+            QMessageBox.information(self, "並び替え", "リストが空です。")
+            return
+        if QMessageBox.question(
+                self, "時刻順にソート",
+                "リストを時刻順に並び替えます。\nこの操作は元に戻せません。よろしいですか？",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No) != QMessageBox.StandardButton.Yes:
+            return
+        # 時刻なしの行は末尾へ（元の順序は保つ）
+        ordered = sorted(
+            enumerate(rows),
+            key=lambda p: (p[1].timestamp_ms is None,
+                           p[1].timestamp_ms if p[1].timestamp_ms is not None else 0,
+                           p[0]))
+        self.table.setRowCount(0)
+        for _i, row in ordered:
+            self.table.add_row(row)
+        self.status_strip.set_message("時刻順に並び替えました", "ok")
+
     def _write_session(self):
+        path = self.project.storage_path()
         try:
             rows = [{"speaker": r.speaker, "text": r.text, "timestamp_ms": r.timestamp_ms}
                     for r in self.table.to_rows()]
-            data = {
-                "rows": rows,
+            project.write(path, rows, {
                 "input_mode": self.config.get("input_mode", "desktop"),
                 "media_path": self.media.current_path(),
-            }
-            # 直前の内容を .bak に退避してから書く。
-            # 誤って全消し・上書きしても1世代前に戻せるようにする。
-            if os.path.exists(self._session_path):
-                try:
-                    import shutil
-                    shutil.copyfile(self._session_path, self._session_path + ".bak")
-                except Exception:
-                    pass
-            with open(self._session_path, "w", encoding="utf-8") as f:
-                json.dump(data, f, ensure_ascii=False, indent=2)
+            })
+            self._session_path = path
         except Exception as e:
             print(f"[session] save error: {e}")
+            self._session_path = path
             # 保存できないと書き起こしが失われるため、一度だけ明示的に警告する
             if not self._session_error_shown:
                 self._session_error_shown = True
@@ -788,11 +916,17 @@ class MainWindow(QMainWindow):
                     "こまめに CSV/TXT へエクスポートすることを推奨します。")
 
     def _restore_session(self):
-        if not os.path.exists(self._session_path):
+        # 前回開いていたプロジェクトがあればそれを、無ければ自動保存を読む
+        last = self.config.get("last_project")
+        if last and os.path.exists(last):
+            self.project.open(last)
+        path = self.project.storage_path()
+        self._session_path = path
+        self._update_project_label()
+        if not os.path.exists(path):
             return
         try:
-            with open(self._session_path, "r", encoding="utf-8") as f:
-                data = json.load(f)
+            data = project.read(path)
             rows = data.get("rows", [])
         except Exception as e:
             print(f"[session] load error: {e}")
@@ -817,7 +951,7 @@ class MainWindow(QMainWindow):
             self.status_strip.set_message("前回の作業状態を復元しました（" + " / ".join(msgs) + "）。")
 
     def _check_ocr_availability(self):
-        engine = self.config.get("ocr_engine", "windows")
+        engine = self.config.get("ocr_engine", "rapidocr")
         if engine != "windows":
             import importlib.util
             if importlib.util.find_spec("rapidocr") is None:
