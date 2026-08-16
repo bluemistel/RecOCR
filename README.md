@@ -13,10 +13,9 @@
   - **連続モード**: 再生を止めず 1〜9キー押下ごとに「…認識中」行を即挿入し、別プロセスOCRの結果を順次差し替え。
 - **ブックマーク（動画）**: 取り込み時の再生位置を各行に記録。時刻セルをクリックでその位置へシーク。
 - **作業状態の自動保存**: 追加・編集・削除のたびに `session.json` へ自動保存し、次回起動時に復元（クラッシュしても書き起こしは失われません）。「リストクリア」で消去できます。
-- **OCRエンジン（3種切替）**:
-  - **RapidOCR / PP-OCR**（推奨）— PaddleOCR の PP-OCR モデルを ONNX Runtime で実行。torch 不要で軽量。**ディザ・低解像度のゲーム字幕に強い**。
-  - **Windows OCR** — OS 標準。最軽量で、鮮明な画像では最高精度。
-  - **EasyOCR** — 任意（別途 `pip install easyocr`、torch 同梱で重い）。
+- **OCRエンジン（2種切替）**:
+  - **RapidOCR / PP-OCR**（既定）— PaddleOCR の PP-OCR モデルを ONNX Runtime で実行。torch 不要で軽量。**ディザ・低解像度のゲーム字幕に強い**。日本語・英語を1つの多言語モデルで認識するため言語設定は不要。
+  - **Windows OCR** — OS 標準。追加容量は約3MBのみで、鮮明な画像では最高精度。
 
   簡易ベンチマーク（合成した日本語字幕・文字誤り率 CER、低いほど良い）:
 
@@ -29,6 +28,7 @@
 - **前処理オプション（精度優先）**: ドットフォントや小さい文字向けに、拡大・グレースケール・コントラスト強調(CLAHE)・ノイズ除去・二値化・色反転を選択適用（設定タブ）。速度より精度を優先したいときに有効。
 - **日本語校正（非LLM）**: 辞書＋編集距離(RapidFuzz)＋視覚類似字＋**単語バイグラム言語モデル(文脈)** で「永速→永遠」「芳働→労働」「永満→永遠」等の誤認識を補正。設定で **オフ / 候補提示（非破壊）/ 自動修正** を切替。候補提示では該当行を強調し、候補ボタンで採用。正しい語（辞書内）は変更しません。
   - 文脈モデルは Tatoeba 日本語コーパス(約25万文, CC-BY)を Sudachi で解析して構築した単語バイグラム(同梱, 1.1MB)。「永遠に」のような自然な繋がりを優先し、視覚類似だけでは選べない誤りを解消します。
+  - 実行時の単語分割は、SudachiPy があればそれを使い、無ければ語彙ベースの軽量分割に自動フォールバックします（配布物は 200MB 超の Sudachi 辞書を同梱しないためこちら。実測で校正結果は Sudachi 使用時と同一でした）。
 - **多数決OCR（精度優先・低速）**: 前処理条件（拡大率・二値化・反転）を変えて複数回OCRし、文字単位の多数決＋辞書尤度で統合。劣化画像・ディザ字幕に有効。設定タブで有効化。
 - **半角スペース除去**: OCRが挿入しがちな不要な半角スペースを取り込み時に一括除去（設定タブ）。
 - OCRは常に別プロセス（`ProcessPoolExecutor`）で実行し、UIをブロックしません。
@@ -36,7 +36,8 @@
 ## 必要環境
 
 - Windows 10/11、Python 3.14（3.10+ で動作見込み）
-- **Windows OCR 日本語言語パック**（未導入だと起動時に案内が表示されます）
+- 既定の **RapidOCR** は追加の OS 設定なしで動作します。
+- **Windows OCR** に切り替える場合のみ、日本語言語パックが必要です
   - 設定 → 時刻と言語 → 言語と地域 → 日本語 → オプション → 「基本入力」をインストール
 
 ## セットアップ
@@ -76,8 +77,8 @@ python main.py
 | キー | 説明 |
 |---|---|
 | `characters` | 1〜9キーと話者名の対応 |
-| `ocr_engine` | `rapidocr`（推奨）/ `rapidocr:medium` / `windows` / `easyocr` |
-| `ocr_lang` | `ja` / `en` |
+| `ocr_engine` | `rapidocr`（既定）/ `windows` |
+| `ocr_lang` | Windows OCR の言語（`ja` / `en`）。RapidOCR は多言語モデルのため無関係 |
 | `preprocess` | OCR前処理（`enabled`, `upscale`, `grayscale`, `denoise`, `contrast`, `binarize`, `invert`）|
 | `multi_ocr_vote` | 多数決OCR（`true` で複数条件の認識結果を統合・低速）|
 | `remove_spaces` | 認識結果の半角スペースを除去（`true` / `false`）|
@@ -98,14 +99,14 @@ venv\Scripts\python.exe -m pip install pyinstaller
 venv\Scripts\python.exe build_exe.py    # -> dist/RecoOCR/RecoOCR.exe
 ```
 
-- 既定は **Windows OCR 版**（約 470MB、torch 非同梱で軽量・安定）。同梱される `config.json` は開発環境の設定ではなく**アプリの初期設定から生成**されます（EasyOCR 非同梱ビルドでは `ocr_engine` は `windows`）。
-- **EasyOCR も同梱したい場合**（torch 込みで数 GB・ビルドに時間がかかります）:
+- 生成物は約 480MB（zip で約 257MB）。同梱される `config.json` は開発環境の設定ではなく**アプリの初期設定から生成**されます。
+- ビルド後の動作確認（GUIなしで OCR・校正・同梱データを検証）:
 
   ```powershell
-  venv\Scripts\python.exe build_exe.py --with-easyocr
+  dist\RecoOCR\RecoOCR.exe --selftest
   ```
 
-- 生成物は `dist/RecoOCR/` フォルダごと配布します（`RecoOCR.exe` と `config.json`、依存一式が入っています）。実行先の PC でも **Windows OCR の日本語言語パック**が必要です。
+- 生成物は `dist/RecoOCR/` フォルダごと配布します（`RecoOCR.exe` と `config.json`、依存一式が入っています）。**Windows OCR** を使う場合のみ、実行先の PC に日本語言語パックが必要です（既定の RapidOCR は不要）。
 
 > `[Errno 2] No such file or directory` が出る場合は、`python` ではなく `venv\Scripts\python.exe` を使っているか確認してください。venv の python は実体パスなので subprocess から正しく起動できます。
 
@@ -116,8 +117,8 @@ main.py                エントリポイント
 app/
   main_window.py       UI司令塔・モード制御・キー処理
   config_manager.py    設定の読み書き
-  ocr/                 base(IF) / windows_ocr / easyocr_engine / preprocess / vote / ocr_worker(別プロセス)
-  correction/          corrector（校正）/ visual（類似字）/ lm（バイグラム）/ data（同梱モデル）
+  ocr/                 base(IF) / rapidocr_engine / windows_ocr / preprocess / vote / ocr_worker(別プロセス)
+  correction/          corrector（校正）/ visual（類似字）/ lm（バイグラム）/ tokenize（軽量分割）/ data（同梱モデル）
   capture/             desktop_capture（デスクトップ矩形選択）
   media/               media_player_widget / region_overlay / frame_grabber
   widgets/             transcript_table / settings_panel / correction_panel
@@ -136,7 +137,7 @@ app/
 | コンポーネント | 用途 | ライセンス |
 |---|---|---|
 | [Tatoeba](https://tatoeba.org/) 日本語文コーパス | 同梱バイグラムモデル `app/correction/data/jp_bigram.json.gz` の生成元 | CC BY 2.0 FR |
-| [SudachiPy / SudachiDict](https://github.com/WorksApplications/SudachiPy) | 形態素解析・辞書 | Apache License 2.0 |
+| [SudachiPy / SudachiDict](https://github.com/WorksApplications/SudachiPy) | 形態素解析（同梱バイグラムの構築時に使用。実行時は任意） | Apache License 2.0 |
 | [wordfreq](https://github.com/rspeer/wordfreq) | 語彙頻度辞書 | MIT / データは各出典に従う |
 | [RapidFuzz](https://github.com/rapidfuzz/RapidFuzz) | 編集距離・候補検索 | MIT |
 | [PySide6 (Qt for Python)](https://www.qt.io/qt-for-python) | GUI | LGPLv3 |
@@ -145,8 +146,7 @@ app/
 | [Pillow](https://python-pillow.org/) / [NumPy](https://numpy.org/) | 画像処理・数値計算 | MIT-CMU / BSD |
 | [RapidOCR](https://github.com/RapidAI/RapidOCR) / [PaddleOCR](https://github.com/PaddlePaddle/PaddleOCR) モデル | OCRエンジン（PP-OCR の ONNX 実行） | Apache License 2.0 |
 | [ONNX Runtime](https://onnxruntime.ai/) | 推論エンジン | MIT |
-| [EasyOCR](https://github.com/JaidedAI/EasyOCR)（任意） | 代替OCRエンジン | Apache License 2.0 |
-| [OpenCV](https://opencv.org/)（任意） | 前処理の高品質化 | Apache License 2.0 |
+| [OpenCV](https://opencv.org/) | 前処理・RapidOCR の画像処理 | Apache License 2.0 |
 
 同梱の `jp_bigram.json.gz` は Tatoeba Project の日本語文（CC BY 2.0 FR）から統計量（単語ユニグラム／バイグラム頻度）を抽出した派生物です。原文そのものは含みません。
 

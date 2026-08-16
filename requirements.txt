@@ -4,7 +4,13 @@ pynput>=1.7
 numpy>=1.24
 Pillow>=10.0
 
-# Windows OCR (Windows.Media.Ocr) — PyWinRT projected packages
+# OCR: RapidOCR（PaddleOCR の PP-OCR モデルを ONNX Runtime で実行。torch 不要）
+# ※ PaddleOCR 本家（paddlepaddle）は Python 3.14 向けの配布が無いためこちらを使用
+rapidocr>=3.0
+onnxruntime>=1.20
+opencv-python>=4.9        # RapidOCR と前処理が使用
+
+# OCR: Windows OCR（Windows.Media.Ocr）— PyWinRT projected packages
 winrt-runtime>=3.2
 winrt-Windows.Media.Ocr>=3.2
 winrt-Windows.Graphics.Imaging>=3.2
@@ -13,20 +19,13 @@ winrt-Windows.Globalization>=3.2
 winrt-Windows.Foundation>=3.2
 winrt-Windows.Foundation.Collections>=3.2
 
-# RapidOCR（PaddleOCR の PP-OCR モデルを ONNX Runtime で実行。torch 不要）
-# ※ PaddleOCR 本家（paddlepaddle）は Python 3.14 向けの配布が無いためこちらを使用
-rapidocr>=3.0
-onnxruntime>=1.20
-
-# 日本語校正（辞書＋編集距離＋視覚類似字）
+# 日本語校正（辞書＋編集距離＋視覚類似字＋バイグラム文脈）
 rapidfuzz>=3.0
-sudachipy>=0.6
-sudachidict-core>=20230000
 wordfreq>=3.0
 
-# --- 任意（フォールバック / ハイブリッド） ---
-# easyocr>=1.7          # 別OCRエンジン（torch同梱で重い。前処理用のcv2も入る）
-# opencv-python>=4.9    # 前処理を高品質化（無くてもPillowで代替）
+# --- 任意 ---
+# sudachipy>=0.6          # あれば校正の分割に使用（無ければ語彙ベースの軽量分割に自動フォールバック）
+# sudachidict-core        # 辞書は200MB超のため配布物には同梱していない
 
 # --- ビルド ---
 # pyinstaller>=6.0

@@ -9,11 +9,8 @@
 WindowsApps のエイリアスとなり subprocess が起動できず「[Errno 2] No such file
 or directory」になります。その場合は上記のように venv の python を使ってください。
 
-生成物: dist/RecoOCR/RecoOCR.exe（config.json は同階層にコピーされます）。
-
-既定は Windows OCR 版（軽量）。EasyOCR も同梱したい場合:
-    venv\\Scripts\\python.exe build_exe.py --with-easyocr
-    （torch を含むため非常に大きく・ビルドに時間がかかります）
+生成物: dist/RecoOCR/RecoOCR.exe（初期設定の config.json が同階層に置かれます）。
+ビルド後の動作確認:  dist\\RecoOCR\\RecoOCR.exe --selftest
 """
 import os
 import shutil
@@ -24,8 +21,8 @@ from pathlib import Path
 ROOT = Path(__file__).parent
 
 # 実行時に import される主要パッケージ（欠けていると exe が動かない）
-REQUIRED = ["PySide6", "pynput", "numpy", "PIL", "rapidfuzz", "sudachipy",
-            "sudachidict_core", "wordfreq", "winrt", "rapidocr", "onnxruntime"]
+REQUIRED = ["PySide6", "pynput", "numpy", "PIL", "rapidfuzz",
+            "wordfreq", "winrt", "rapidocr", "onnxruntime"]
 
 
 def _check_environment():
@@ -54,7 +51,7 @@ def _check_environment():
         sys.exit(1)
 
 
-def _write_default_config(path, with_easyocr: bool):
+def _write_default_config(path):
     """配布用に「初期設定」の config.json を生成する。
 
     開発環境の config.json（話者名・切り取り座標などの個人設定）は使わない。
@@ -64,25 +61,18 @@ def _write_default_config(path, with_easyocr: bool):
     from app.config_manager import DEFAULTS
 
     cfg = json.loads(json.dumps(DEFAULTS))  # ネストを含む深いコピー
-    # 同梱している RapidOCR を既定にする（EasyOCR は非同梱ビルドでは選べない）
-    cfg["ocr_engine"] = "rapidocr"
+    cfg["ocr_engine"] = "rapidocr"          # 同梱している既定エンジン
     path.write_text(json.dumps(cfg, ensure_ascii=False, indent=4) + "\n",
                     encoding="utf-8")
 
 
 def main():
-    with_easyocr = "--with-easyocr" in sys.argv
     _check_environment()
-
-    env = dict(os.environ)
-    if with_easyocr:
-        env["RECOOCR_WITH_EASYOCR"] = "1"
-        print("EasyOCR を同梱します（torch 込みで巨大・時間がかかります）。")
 
     try:
         subprocess.run(
             [sys.executable, "-m", "PyInstaller", "recoocr.spec", "--noconfirm", "--clean"],
-            cwd=str(ROOT), check=True, env=env,
+            cwd=str(ROOT), check=True,
         )
     except subprocess.CalledProcessError as e:
         print(f"\nPyInstaller がエラー終了しました (code {e.returncode})。上のログを確認してください。")
@@ -90,9 +80,10 @@ def main():
 
     dist_dir = ROOT / "dist" / "RecoOCR"
     if dist_dir.exists():
-        _write_default_config(dist_dir / "config.json", with_easyocr)
+        _write_default_config(dist_dir / "config.json")
         print(f"\n完了: {dist_dir / 'RecoOCR.exe'}")
         print("初期設定の config.json を EXE と同じ階層に配置しました（実行時に読み書きします）。")
+        print(f"動作確認: \"{dist_dir / 'RecoOCR.exe'}\" --selftest")
 
 
 if __name__ == "__main__":

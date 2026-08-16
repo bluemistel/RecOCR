@@ -81,14 +81,15 @@ class Corrector:
                 if 2 <= len(w) <= 6 and _KANJI_RUN.fullmatch(w):
                     buckets.setdefault(len(w), []).append(w)
             self._pool_by_len = buckets
-            # Sudachi（任意。無ければ複合語の除外チェックを省略）
+            # 分割器: Sudachi があれば優先。無ければ語彙ベースの軽量分割にフォールバック
             try:
                 from sudachipy import dictionary, tokenizer
                 self._tok = dictionary.Dictionary(dict="core").create()
                 self._mode = tokenizer.Tokenizer.SplitMode.C
-            except Exception as e:
-                print(f"[correction] Sudachi 無効（頻度のみで動作）: {e}")
+            except Exception:
+                from .tokenize import SimpleTokenizer
                 self._tok = None
+                self._simple = SimpleTokenizer(self._freq)
             self._ready = True
         except Exception as e:
             self._error = e
@@ -99,9 +100,9 @@ class Corrector:
         return self._freq.get(w, 0.0)
 
     def _is_valid_compound(self, run: str) -> bool:
-        """Sudachi で全て『長さ2以上の有効語』に分割できるなら正当な複合とみなす。"""
+        """全て『長さ2以上の有効語』に分割できるなら正当な複合語とみなす。"""
         if self._tok is None:
-            return False
+            return self._simple.split_all_valid(run)
         try:
             toks = self._tok.tokenize(run, self._mode)
         except Exception:
@@ -150,10 +151,10 @@ class Corrector:
         return scored
 
     def _neighbors(self, line: str, start: int, cand: str):
-        """置換後の文での左右の隣接語を返す（Sudachi・文脈スコア用）。"""
-        if self._tok is None:
-            return None, None
+        """置換後の文での左右の隣接語を返す（文脈スコア用）。"""
         lp = line[:start] + cand + line[start + len(cand):]
+        if self._tok is None:
+            return self._simple.neighbors(lp, start, cand)
         try:
             toks = list(self._tok.tokenize(lp, self._mode))
         except Exception:

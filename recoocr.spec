@@ -1,18 +1,18 @@
 # -*- mode: python ; coding: utf-8 -*-
 """PyInstaller spec for RecoOCR.
 
-既定では EasyOCR/torch は同梱しない（Windows OCR = winrt を利用、軽量）。
-環境変数 RECOOCR_WITH_EASYOCR=1 のとき EasyOCR も同梱する（torch 込みで巨大）。
-winrt の projected パッケージは動的 import が多いため collect_all で取り込む。
+同梱するOCRは RapidOCR（PP-OCR / ONNX Runtime）と Windows OCR（winrt）の2種。
+torch 系・EasyOCR は同梱しない。
+Sudachi 辞書（200MB超）も同梱せず、校正は語彙ベースの軽量分割にフォールバックする
+（実測で Sudachi 使用時と同一の校正結果が得られている）。
+PP-OCR の medium モデル（134MB）も同梱しない（small の方が高精度だったため）。
 """
 import os
 from PyInstaller.utils.hooks import collect_all, collect_submodules
 
-WITH_EASYOCR = os.environ.get("RECOOCR_WITH_EASYOCR") == "1"
-
 datas, binaries, hiddenimports = [], [], []
 
-# winrt（PyWinRT）projected packages
+# winrt（PyWinRT）projected packages … Windows OCR 用
 for pkg in [
     "winrt",
     "winrt.windows.media.ocr",
@@ -27,9 +27,8 @@ for pkg in [
     binaries += b
     hiddenimports += h
 
-# OCR / 校正の依存（モデル・辞書などのデータファイルを含むため collect_all）
-for pkg in ["rapidocr", "onnxruntime",
-            "sudachipy", "sudachidict_core", "wordfreq", "rapidfuzz"]:
+# OCR / 校正の依存（モデル・データファイルを含むため collect_all）
+for pkg in ["rapidocr", "onnxruntime", "wordfreq", "rapidfuzz"]:
     try:
         d, b, h = collect_all(pkg)
         datas += d
@@ -38,6 +37,9 @@ for pkg in ["rapidocr", "onnxruntime",
     except Exception:
         pass
 
+# PP-OCR の medium モデルは同梱しない（small のみでサイズを抑える）
+datas = [x for x in datas if "medium" not in os.path.basename(x[0]).lower()]
+
 # アプリ内モジュール（ワーカープロセスが動的に import するため明示）
 hiddenimports += collect_submodules("app")
 hiddenimports += ["pynput.keyboard", "pynput.mouse"]
@@ -45,22 +47,12 @@ hiddenimports += ["pynput.keyboard", "pynput.mouse"]
 # 校正用データ（バイグラム言語モデル）を同梱
 datas += [("app/correction/data/jp_bigram.json.gz", "app/correction/data")]
 
-# EasyOCR を同梱する場合（RECOOCR_WITH_EASYOCR=1）
-if WITH_EASYOCR:
-    for pkg in ["easyocr", "torch", "torchvision", "cv2"]:
-        try:
-            d, b, h = collect_all(pkg)
-            datas += d
-            binaries += b
-            hiddenimports += h
-        except Exception:
-            pass
-    excludes = []
-else:
-    # cv2 は RapidOCR と前処理が使うため除外しない（torch 系のみ外す）。
-    # scipy / skimage は EasyOCR 経由で入るだけで、非同梱ビルドでは未使用。
-    excludes = ["easyocr", "torch", "torchvision", "torchaudio",
-                "scipy", "skimage", "matplotlib", "sklearn", "pandas"]
+# 同梱しないもの（サイズ削減）
+excludes = [
+    "easyocr", "torch", "torchvision", "torchaudio",     # EasyOCR 系
+    "sudachipy", "sudachidict_core",                     # 校正は軽量分割にフォールバック
+    "scipy", "skimage", "matplotlib", "sklearn", "pandas",
+]
 
 block_cipher = None
 

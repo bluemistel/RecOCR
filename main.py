@@ -55,12 +55,33 @@ def _selftest() -> int:
         print(f"NG: OCRエンジンの初期化/実行に失敗: {type(e).__name__}: {e}")
         ok = False
 
-    # 校正データ（同梱バイグラム）の確認
+    # 校正（辞書＋類似字＋バイグラム文脈）の確認
     try:
         from app.correction.lm import get_lm
-        print(f"bigram LM   : {'OK' if get_lm().ensure_loaded() else 'NG (読み込み失敗)'}")
+        from app.correction.corrector import get_corrector
+        lm_ok = get_lm().ensure_loaded()
+        print(f"bigram LM   : {'OK' if lm_ok else 'NG (読み込み失敗)'}")
+        if not lm_ok:
+            ok = False
+
+        c = get_corrector("ja")
+        c.ensure_loaded()
+        print(f"分割器      : {'Sudachi' if c._tok is not None else 'SimpleTokenizer(同梱版)'}")
+        src = "永速に芳働を、永満に職務を。"
+        want = "永遠に労働を、永遠に職務を。"
+        got = c.apply_best(src)
+        print(f"校正テスト  : {src} -> {got}")
+        if got != want:
+            print(f"NG: 校正結果が期待と異なります（期待: {want}）")
+            ok = False
+        # 正しい語を壊していないか
+        keep = "人口管理チームにより、追放手続きの対象となります。"
+        if c.apply_best(keep) != keep:
+            print(f"NG: 正しい語を誤修正しました -> {c.apply_best(keep)}")
+            ok = False
     except Exception as e:
-        print(f"bigram LM   : NG {e}")
+        print(f"校正        : NG {type(e).__name__}: {e}")
+        ok = False
 
     print("=== RESULT:", "PASS" if ok else "FAIL", "===")
     return 0 if ok else 1

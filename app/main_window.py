@@ -716,7 +716,7 @@ class MainWindow(QMainWindow):
 
     def _check_ocr_availability(self):
         engine = self.config.get("ocr_engine", "windows")
-        if engine.startswith("rapidocr") or engine in ("paddle", "paddleocr"):
+        if engine != "windows":
             import importlib.util
             if importlib.util.find_spec("rapidocr") is None:
                 QMessageBox.warning(
@@ -725,16 +725,6 @@ class MainWindow(QMainWindow):
                     "次のコマンドで導入してください:\n"
                     "    pip install rapidocr onnxruntime\n\n"
                     "初回実行時に PP-OCR モデル（数十MB）が自動ダウンロードされます。")
-            return
-        if engine == "easyocr":
-            import importlib.util
-            if importlib.util.find_spec("easyocr") is None:
-                QMessageBox.warning(
-                    self, "EasyOCR 未インストール",
-                    "EasyOCR が選択されていますが、インストールされていません。\n\n"
-                    "次のコマンドで導入してください（PyTorch を含み容量が大きめです）:\n"
-                    "    pip install easyocr\n\n"
-                    "導入するまでは OCR を実行できません。設定で Windows OCR に戻すこともできます。")
             return
         lang = self.config.get("ocr_lang", "ja")
         if not WindowsOCREngine.is_available(lang):

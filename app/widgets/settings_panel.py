@@ -31,22 +31,16 @@ class SettingsPanel(QWidget):
         layout.addWidget(QLabel("OCRエンジン:"))
         self.engine_combo = QComboBox()
         self.engine_combo.addItem("RapidOCR / PP-OCR（推奨・劣化画像に強い）", "rapidocr")
-        self.engine_combo.addItem("RapidOCR / PP-OCR（大きめモデル）", "rapidocr:medium")
-        self.engine_combo.addItem("Windows OCR（軽量・鮮明な画像向き）", "windows")
-        self.engine_combo.addItem("EasyOCR（要インストール・低速）", "easyocr")
-        idx = self.engine_combo.findData(config.get("ocr_engine", "windows"))
+        self.engine_combo.addItem("Windows OCR（最軽量・鮮明な画像向き）", "windows")
+        idx = self.engine_combo.findData(config.get("ocr_engine", "rapidocr"))
         if idx >= 0:
             self.engine_combo.setCurrentIndex(idx)
         layout.addWidget(self.engine_combo)
 
-        layout.addWidget(QLabel("OCR言語:"))
-        self.lang_combo = QComboBox()
-        self.lang_combo.addItem("日本語 (ja)", "ja")
-        self.lang_combo.addItem("English (en)", "en")
-        idx = self.lang_combo.findData(config.get("ocr_lang", "ja"))
-        if idx >= 0:
-            self.lang_combo.setCurrentIndex(idx)
-        layout.addWidget(self.lang_combo)
+        hint_engine = QLabel("※ RapidOCR は日本語・英語を1つのモデルで認識します（言語設定は不要）。")
+        hint_engine.setWordWrap(True)
+        hint_engine.setStyleSheet("color: gray; font-size: 11px;")
+        layout.addWidget(hint_engine)
 
         layout.addWidget(self._build_preprocess_group())
 
@@ -165,7 +159,6 @@ class SettingsPanel(QWidget):
     def _save(self):
         self.config.set("shortcut_key", self.shortcut_input.text(), save=False)
         self.config.set("ocr_engine", self.engine_combo.currentData(), save=False)
-        self.config.set("ocr_lang", self.lang_combo.currentData(), save=False)
         self.config.set("preprocess", self._preprocess_from_ui(), save=False)
         self.config.set("multi_ocr_vote", self.chk_vote.isChecked(), save=False)
         self.config.set("remove_spaces", self.chk_remove_spaces.isChecked(), save=False)
