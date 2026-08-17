@@ -207,6 +207,26 @@ class MediaPlayerWidget(QWidget):
     def current_path(self) -> str | None:
         return self._path
 
+    def unload(self):
+        """読み込み前の状態へ戻す（プロジェクトを閉じたときなどに使う）。
+
+        再生を止めてソースを外し、表示・選択領域・再生位置をすべて初期化する。
+        表示が空になるのでドラッグ&ドロップの案内が再び出る。
+        """
+        self.player.stop()
+        self.player.setSource(QUrl())
+        self._is_video = False
+        self._has_media = False
+        self._path = None
+        self.display.set_image(QImage())      # 案内表示に戻る
+        self.display.overlay.set_region(None)  # 読み取り領域も解除
+        self.slider.setRange(0, 0)
+        self.slider.setValue(0)
+        self.speed_combo.setCurrentIndex(self.speed_combo.findData(1.0))
+        self.player.setPlaybackRate(1.0)
+        self._update_controls_enabled(False)
+        self._update_time_label(0, 0)
+
     def load(self, path: str) -> bool:
         ext = os.path.splitext(path)[1].lower()
         if ext in IMAGE_EXTS:

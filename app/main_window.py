@@ -863,8 +863,10 @@ class MainWindow(QMainWindow):
         self.project.close()
         self.config.set("last_project", None)
         self.table.setRowCount(0)
+        self.media.unload()            # 読み込んでいた画像/動画も解放する
         self._session_path = self.project.storage_path()
         self._update_project_label()
+        self._refresh_state_indicators()
         self.status_strip.set_message("プロジェクトを閉じました（新しいプロジェクト）")
 
     # ================================================================
