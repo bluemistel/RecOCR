@@ -38,9 +38,14 @@ from .ocr.windows_ocr import WindowsOCREngine
 from .export import exporter
 
 
-EXPORT_TOOLTIP = """列の並び: 話者名, 台詞, [プリセット名], [時刻]
+EXPORT_TOOLTIP = """列の並び: 話者名, 台詞, [プリセット名]
 話者名を「話者名,プリセット名」と登録した行があると、プリセット名が3列目に入ります（未指定の行は空欄）。
-動画から取り込んだ行がある場合は、最後に時刻列が付きます。"""
+合成音声ソフトへの取り込み用のため、時刻は出力しません。時刻が必要な場合は SRT を使ってください。"""
+
+
+SRT_TOOLTIP = """動画から取り込んだ行（時刻あり）を字幕ファイルとして書き出します。
+終了時刻は次の台詞の開始時刻から自動で決めます。
+時刻を持たない行（デスクトップ/画像から取り込んだ行）は含まれません。"""
 
 
 class GlobalHotkeyEmitter(QObject):
@@ -228,13 +233,17 @@ class MainWindow(QMainWindow):
         self.btn_txt = QPushButton("TXT エクスポート")
         for _b in (self.btn_csv, self.btn_txt):
             _b.setToolTip(EXPORT_TOOLTIP)
+        self.btn_srt = QPushButton("SRT エクスポート")
+        self.btn_srt.setToolTip(SRT_TOOLTIP)
         self.btn_sort = QPushButton("時刻順にソート")
         self.btn_sort.setToolTip("リストを時刻の昇順に並び替えます（確認あり）")
         self.btn_csv.clicked.connect(lambda: self._export("csv"))
         self.btn_txt.clicked.connect(lambda: self._export("txt"))
+        self.btn_srt.clicked.connect(self._export_srt)
         self.btn_sort.clicked.connect(self._sort_by_time)
         export_row.addWidget(self.btn_csv)
         export_row.addWidget(self.btn_txt)
+        export_row.addWidget(self.btn_srt)
         export_row.addWidget(self.btn_sort)
         export_row.addStretch()
         right_layout.addLayout(export_row)
@@ -791,9 +800,36 @@ class MainWindow(QMainWindow):
             return
         try:
             exporter.export(rows, path, fmt,
-                            include_timestamp=self.table.has_timestamps(),
                             include_preset=exporter.has_presets(rows))
             QMessageBox.information(self, "エクスポート完了", f"{path} に保存しました。")
+        except Exception as e:
+            QMessageBox.critical(self, "エラー", f"保存に失敗しました: {e}")
+
+    def _export_srt(self):
+        """字幕ファイル（SRT）として書き出す。時刻を持つ行のみが対象。"""
+        rows = self.table.to_rows()
+        if not rows:
+            QMessageBox.warning(self, "エラー", "エクスポートするデータがありません。")
+            return
+        timed = exporter.timed_rows(rows)
+        if not timed:
+            QMessageBox.warning(
+                self, "SRTを作成できません",
+                "時刻を持つ行がありません。\n\n"
+                "SRT は字幕ファイルのため、動画から取り込んだ行"
+                "（時刻列に値がある行）が必要です。")
+            return
+        skipped = len(rows) - len(timed)
+        path, _ = QFileDialog.getSaveFileName(
+            self, "名前を付けて保存", "export.srt", "字幕ファイル (*.srt)")
+        if not path:
+            return
+        try:
+            count = exporter.export_srt(rows, path)
+            msg = f"{path} に保存しました。（{count}件）"
+            if skipped:
+                msg += f"\n時刻を持たない {skipped} 行は含まれていません。"
+            QMessageBox.information(self, "エクスポート完了", msg)
         except Exception as e:
             QMessageBox.critical(self, "エラー", f"保存に失敗しました: {e}")
 

@@ -195,9 +195,3 @@ class TranscriptTable(QTableWidget):
             rows.append(TranscriptRow(speaker, text, int(ts) if ts is not None else None))
         return rows
 
-    def has_timestamps(self) -> bool:
-        for r in range(self.rowCount()):
-            time_item = self.item(r, COL_TIME)
-            if time_item and time_item.data(Qt.ItemDataRole.UserRole) is not None:
-                return True
-        return False
