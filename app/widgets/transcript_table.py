@@ -38,7 +38,7 @@ class TranscriptTable(QTableWidget):
         self.setHorizontalHeaderLabels(["話者", "テキスト", "時刻", "削除"])
         header = self.horizontalHeader()
         header.setSectionResizeMode(COL_SPEAKER, QHeaderView.ResizeMode.Fixed)
-        self.setColumnWidth(COL_SPEAKER, 120)
+        self.setColumnWidth(COL_SPEAKER, 170)   # 「話者名,プリセット名」でも切れにくい幅
         header.setSectionResizeMode(COL_TEXT, QHeaderView.ResizeMode.Stretch)
         header.setSectionResizeMode(COL_TIME, QHeaderView.ResizeMode.Fixed)
         self.setColumnWidth(COL_TIME, 90)

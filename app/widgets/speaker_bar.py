@@ -10,6 +10,7 @@ from PySide6.QtWidgets import (QWidget, QHBoxLayout, QVBoxLayout, QLabel,
 from PySide6.QtCore import Qt, Signal, QTimer
 
 from .. import theme
+from ..models.transcript_model import TranscriptRow
 
 
 class SpeakerChip(QPushButton):
@@ -19,16 +20,24 @@ class SpeakerChip(QPushButton):
         super().__init__(parent)
         self.key = key
         self.name = name
+        # 「話者名,プリセット名」形式なら、チップ上では分けて見せる
+        display_name, preset = TranscriptRow.split_speaker(name)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setMinimumHeight(44)          # クリックしやすい高さ
         self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
-        self.setToolTip(f"{key} キー → {name}（クリックでも読み取り）")
+        tip = f"{key} キー → {display_name}"
+        if preset:
+            tip += f"（プリセット: {preset}）"
+        self.setToolTip(tip + " / クリックでも読み取れます")
         self._flash = QTimer(self)
         self._flash.setSingleShot(True)
         self._flash.setInterval(320)
         self._flash.timeout.connect(self._restore)
         self._apply(active=False)
-        self.setText(f"  {key}   {name}  ")
+        label = f"  {key}   {display_name}"
+        if preset:
+            label += f" / {preset}"
+        self.setText(label + "  ")
 
     def _apply(self, active: bool):
         if active:

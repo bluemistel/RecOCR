@@ -38,6 +38,11 @@ from .ocr.windows_ocr import WindowsOCREngine
 from .export import exporter
 
 
+EXPORT_TOOLTIP = """列の並び: 話者名, 台詞, [プリセット名], [時刻]
+話者名を「話者名,プリセット名」と登録した行があると、プリセット名が3列目に入ります（未指定の行は空欄）。
+動画から取り込んだ行がある場合は、最後に時刻列が付きます。"""
+
+
 class GlobalHotkeyEmitter(QObject):
     hotkey_triggered = Signal()
 
@@ -221,6 +226,8 @@ class MainWindow(QMainWindow):
         export_row.setSpacing(8)
         self.btn_csv = QPushButton("CSV エクスポート")
         self.btn_txt = QPushButton("TXT エクスポート")
+        for _b in (self.btn_csv, self.btn_txt):
+            _b.setToolTip(EXPORT_TOOLTIP)
         self.btn_sort = QPushButton("時刻順にソート")
         self.btn_sort.setToolTip("リストを時刻の昇順に並び替えます（確認あり）")
         self.btn_csv.clicked.connect(lambda: self._export("csv"))
@@ -783,7 +790,9 @@ class MainWindow(QMainWindow):
         if not path:
             return
         try:
-            exporter.export(rows, path, fmt, include_timestamp=self.table.has_timestamps())
+            exporter.export(rows, path, fmt,
+                            include_timestamp=self.table.has_timestamps(),
+                            include_preset=exporter.has_presets(rows))
             QMessageBox.information(self, "エクスポート完了", f"{path} に保存しました。")
         except Exception as e:
             QMessageBox.critical(self, "エラー", f"保存に失敗しました: {e}")

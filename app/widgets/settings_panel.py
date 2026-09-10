@@ -68,6 +68,17 @@ class SettingsPanel(QWidget):
         self.char_table.verticalHeader().setVisible(False)
         self.char_table.setMinimumHeight(160)
         spk_l.addWidget(self.char_table)
+        # プリセット指定は分かりにくい機能なので、入力欄のすぐ下で説明する
+        spk_l.addWidget(self._hint(
+            "話者名を「話者名,プリセット名」のように半角カンマで区切ると、"
+            "カンマ以降をプリセット名として扱い、CSV / TXT の3列目に書き出します。"
+            "一部の合成音声ソフトが3列目を、その話者に対する声の種類（プリセット）"
+            "として読み込むための機能です。"))
+        spk_l.addWidget(self._hint(
+            "例）  紲星 あかり,ノーマル  →  「紲星 あかり」「台詞」「ノーマル」の3列で出力されます。"
+            "同じ話者の声を使い分けたい場合は、"
+            "「あかり,ノーマル」「あかり,ささやき」のように別のキーへ登録してください"
+            "（アプリ側では同一話者かどうかを判定しません）。"))
         btn_row = QHBoxLayout()
         self.btn_add_char = QPushButton("＋ 話者を追加")
         self.btn_add_char.clicked.connect(lambda: self.add_char_row())
