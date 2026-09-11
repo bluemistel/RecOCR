@@ -15,9 +15,21 @@ SRT_LAST_DURATION_MS = 3000    # 最後の行は次が無いのでこの長さ�
 SRT_GAP_MS = 1                 # 次の字幕と重ならないようにあける間隔
 
 
-def _csv_escape(value: str) -> str:
-    """ダブルクォートを "" にエスケープ。"""
-    return value.replace('"', '""')
+def rows_with_separator(rows: list[TranscriptRow], include_preset: bool = False) -> int:
+    """列の区切りと誤認されうる半角カンマを含む行数を数える。
+
+    囲み文字を付けずに出力するため、台詞やプリセット名に半角カンマがあると
+    取り込み側で列がずれる。書き出し後に注意を促すために使う。
+    """
+    count = 0
+    for row in rows:
+        _name, preset = TranscriptRow.split_speaker(row.speaker or "")
+        targets = [row.text or ""]
+        if include_preset:
+            targets.append(preset)
+        if any("," in t for t in targets):
+            count += 1
+    return count
 
 
 def has_presets(rows: list[TranscriptRow]) -> bool:
@@ -42,6 +54,11 @@ def export(rows: list[TranscriptRow], path: str, fmt: str,
     プリセット名は、一部の合成音声ソフトが3列目を「話者に対する音声の
     プリセット」として読むため3列目に置く。
     プリセットを使っていない行は空文字にして列の位置を揃える。
+
+    値は " で囲まない。囲むと取り込み側が引用符ごと本文として読んでしまう
+    ソフトがあるため。そのぶん、台詞に半角カンマがあると列がずれるので、
+    呼び出し側は rows_with_separator() で事前に確認できる。
+    fmt は拡張子の区別だけで、中身は CSV / TXT とも同じ形式。
     """
     with open(path, "w", encoding="utf-8", newline="") as f:
         for row in rows:
@@ -50,10 +67,7 @@ def export(rows: list[TranscriptRow], path: str, fmt: str,
             if include_preset:
                 values.append(preset)
 
-            if fmt == "csv":
-                f.write(",".join(f'"{_csv_escape(v)}"' for v in values) + "\n")
-            else:
-                f.write(",".join(values) + "\n")
+            f.write(",".join(values) + "\n")
 
 
 def format_srt_time(ms: int) -> str:

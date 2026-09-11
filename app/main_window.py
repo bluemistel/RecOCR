@@ -40,7 +40,7 @@ from .export import exporter
 
 EXPORT_TOOLTIP = """列の並び: 話者名, 台詞, [プリセット名]
 話者名を「話者名,プリセット名」と登録した行があると、プリセット名が3列目に入ります（未指定の行は空欄）。
-合成音声ソフトへの取り込み用のため、時刻は出力しません。時刻が必要な場合は SRT を使ってください。"""
+合成音声ソフトへの取り込み用のため、時刻は出力しません（時刻が必要な場合は SRT）。\n値はダブルクォートで囲みません。台詞に半角カンマがあると列がずれます。"""
 
 
 SRT_TOOLTIP = """動画から取り込んだ行（時刻あり）を字幕ファイルとして書き出します。
@@ -799,9 +799,16 @@ class MainWindow(QMainWindow):
         if not path:
             return
         try:
-            exporter.export(rows, path, fmt,
-                            include_preset=exporter.has_presets(rows))
-            QMessageBox.information(self, "エクスポート完了", f"{path} に保存しました。")
+            use_preset = exporter.has_presets(rows)
+            exporter.export(rows, path, fmt, include_preset=use_preset)
+            msg = f"{path} に保存しました。"
+            # 囲み文字を付けないため、本文の半角カンマは列の区切りと誤認される
+            broken = exporter.rows_with_separator(rows, use_preset)
+            if broken:
+                msg += (f"\n\n注意: 半角カンマを含む行が {broken} 件あります。"
+                        "取り込み側で列がずれる場合は、その行のカンマを"
+                        "全角（、）に置き換えてください。")
+            QMessageBox.information(self, "エクスポート完了", msg)
         except Exception as e:
             QMessageBox.critical(self, "エラー", f"保存に失敗しました: {e}")
 
