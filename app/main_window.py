@@ -17,7 +17,7 @@ from PySide6.QtGui import QImage
 
 from pynput import keyboard
 
-from . import theme
+from . import __version__, theme
 from . import project
 from .project import Project
 from .config_manager import ConfigManager
@@ -87,7 +87,7 @@ class _DigitKeyFilter(QObject):
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("RecoOCR")
+        self.setWindowTitle(f"RecoOCR v{__version__}")
         self.resize(1000, 640)
         self.setAcceptDrops(True)
 

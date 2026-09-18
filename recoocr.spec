@@ -9,6 +9,33 @@ PP-OCR の medium モデル（134MB）も同梱しない（small の方が高精
 """
 import os
 from PyInstaller.utils.hooks import collect_all, collect_submodules
+from PyInstaller.utils.win32.versioninfo import (
+    VSVersionInfo, FixedFileInfo, StringFileInfo, StringTable, StringStruct,
+    VarFileInfo, VarStruct)
+
+# アプリのバージョン（app/__init__.py が唯一の定義元）
+with open("app/__init__.py", encoding="utf-8") as _f:
+    APP_VERSION = next(l.split("=")[1].strip().strip('"')
+                       for l in _f if l.startswith("__version__"))
+_ver = tuple(int(x) for x in APP_VERSION.split(".")) + (0,)
+
+# EXE のプロパティ（詳細タブ）に表示されるバージョン情報
+version_info = VSVersionInfo(
+    ffi=FixedFileInfo(filevers=_ver, prodvers=_ver),
+    kids=[
+        StringFileInfo([StringTable("041104B0", [
+            StringStruct("CompanyName", "bluemistel"),
+            StringStruct("FileDescription", "RecoOCR"),
+            StringStruct("FileVersion", APP_VERSION),
+            StringStruct("InternalName", "RecoOCR"),
+            StringStruct("LegalCopyright", "(c) bluemistel / MIT License"),
+            StringStruct("OriginalFilename", "RecoOCR.exe"),
+            StringStruct("ProductName", "RecoOCR"),
+            StringStruct("ProductVersion", APP_VERSION),
+        ])]),
+        VarFileInfo([VarStruct("Translation", [0x0411, 1200])]),
+    ],
+)
 
 datas, binaries, hiddenimports = [], [], []
 
@@ -80,6 +107,7 @@ exe = EXE(
     name="RecoOCR",
     console=False,
     icon="app/resource/icon.ico",       # EXE ファイル自体のアイコン
+    version=version_info,
     disable_windowed_traceback=False,
 )
 coll = COLLECT(
