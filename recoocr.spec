@@ -47,6 +47,9 @@ hiddenimports += ["pynput.keyboard", "pynput.mouse"]
 # 校正用データ（バイグラム言語モデル）を同梱
 datas += [("app/correction/data/jp_bigram.json.gz", "app/correction/data")]
 
+# ウィンドウ/タスクバー用のアイコン
+datas += [("app/resource/icon.png", "app/resource")]
+
 # 同梱しないもの（サイズ削減）
 excludes = [
     "easyocr", "torch", "torchvision", "torchaudio",     # EasyOCR 系
@@ -76,6 +79,7 @@ exe = EXE(
     exclude_binaries=True,
     name="RecoOCR",
     console=False,
+    icon="app/resource/icon.ico",       # EXE ファイル自体のアイコン
     disable_windowed_traceback=False,
 )
 coll = COLLECT(

@@ -61,3 +61,13 @@ def data_dir() -> str:
 # 後方互換: 以前の呼び出し名
 def app_dir() -> str:
     return data_dir()
+
+
+def resource_path(*parts: str) -> str:
+    """app/resource/ 配下の同梱リソース（アイコンなど）のパス。
+
+    PyInstaller の datas は EXE の隣ではなく ``sys._MEIPASS``（onedir なら
+    ``_internal/``）に展開されるため、bundle_dir() とは基準が異なる。
+    """
+    base = getattr(sys, "_MEIPASS", None) or os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    return os.path.join(base, "app", "resource", *parts)

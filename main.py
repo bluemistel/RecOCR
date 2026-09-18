@@ -87,6 +87,17 @@ def _selftest() -> int:
     return 0 if ok else 1
 
 
+def _set_app_user_model_id() -> None:
+    """タスクバーに python.exe ではなく RecoOCR のアイコンを出すための ID 設定。"""
+    if sys.platform != "win32":
+        return
+    try:
+        import ctypes
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("RecoOCR.App")
+    except Exception:
+        pass
+
+
 def main():
     # ProcessPoolExecutor + PyInstaller(onefile) 対策
     multiprocessing.freeze_support()
@@ -95,10 +106,14 @@ def main():
         sys.exit(_selftest())
 
     from PySide6.QtWidgets import QApplication
+    from PySide6.QtGui import QIcon
     from app import theme
+    from app.paths import resource_path
     from app.main_window import MainWindow
 
+    _set_app_user_model_id()
     app = QApplication(sys.argv)
+    app.setWindowIcon(QIcon(resource_path("icon.png")))
     app.setStyle("Fusion")            # OS テーマに左右されず配色を統一する
     app.setPalette(theme.palette())   # チェック記号などは Fusion に描かせる
     app.setStyleSheet(theme.stylesheet())
