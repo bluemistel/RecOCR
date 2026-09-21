@@ -8,8 +8,8 @@ import os
 
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
                                QSlider, QLabel, QSizePolicy, QComboBox)
-from PySide6.QtCore import Qt, Signal, QUrl, QRect
-from PySide6.QtGui import QImage, QPainter, QColor, QPen
+from PySide6.QtCore import Qt, Signal, QUrl, QRect, QPointF, QRectF, QSize
+from PySide6.QtGui import QImage, QPainter, QColor, QPen, QPixmap, QIcon, QPolygonF
 from PySide6.QtMultimedia import QMediaPlayer, QAudioOutput, QVideoSink
 
 from .region_overlay import RegionOverlay
@@ -86,6 +86,38 @@ class VideoDisplay(QWidget):
                          "読み込み後、映像上をドラッグして読み取り領域を指定します")
 
 
+def _media_icon(kind: str) -> QIcon:
+    """再生操作ボタンのアイコンを文字色で描く（kind: play / pause / prev / next）。
+
+    「⏸」「◀」などの記号文字は Windows ではカラー絵文字（青い四角など）で
+    表示されてしまうため、テーマの文字色で自前描画する。
+    """
+    size = 32   # 高DPIでも潰れないよう大きめに描いて縮小表示する
+    pm = QPixmap(size, size)
+    pm.fill(Qt.GlobalColor.transparent)
+    p = QPainter(pm)
+    p.setRenderHint(QPainter.RenderHint.Antialiasing)
+    p.setPen(Qt.PenStyle.NoPen)
+    p.setBrush(QColor(theme.TEXT))
+    if kind == "pause":
+        # 縦棒2本
+        p.drawRoundedRect(QRectF(8, 7, 6, 18), 1.5, 1.5)
+        p.drawRoundedRect(QRectF(18, 7, 6, 18), 1.5, 1.5)
+    elif kind == "play":
+        # 右向き三角
+        p.drawPolygon(QPolygonF([QPointF(10, 6), QPointF(26, 16), QPointF(10, 26)]))
+    elif kind == "prev":
+        # 縦棒＋左向き三角（前のファイル）
+        p.drawRect(QRectF(7, 8, 3, 16))
+        p.drawPolygon(QPolygonF([QPointF(24, 8), QPointF(11, 16), QPointF(24, 24)]))
+    elif kind == "next":
+        # 右向き三角＋縦棒（次のファイル）
+        p.drawPolygon(QPolygonF([QPointF(8, 8), QPointF(21, 16), QPointF(8, 24)]))
+        p.drawRect(QRectF(22, 8, 3, 16))
+    p.end()
+    return QIcon(pm)
+
+
 class _SeekSlider(QSlider):
     """ホイールで 1 秒ずつシーク位置を動かせるスライダー。"""
 
@@ -132,16 +164,22 @@ class MediaPlayerWidget(QWidget):
 
         # --- コントロール ---
         # ファイル送り（画像・動画で共通。読み込んだフォルダ内を移動する）
-        self.btn_prev = QPushButton("◀◀")
+        self.btn_prev = QPushButton()
+        self.btn_prev.setIcon(_media_icon("prev"))
+        self.btn_prev.setIconSize(QSize(16, 16))
         self.btn_prev.setFixedWidth(42)
         self.btn_prev.setToolTip("同じフォルダの前のファイル")
         self.btn_prev.clicked.connect(self.open_prev_file)
-        self.btn_next = QPushButton("▶▶")
+        self.btn_next = QPushButton()
+        self.btn_next.setIcon(_media_icon("next"))
+        self.btn_next.setIconSize(QSize(16, 16))
         self.btn_next.setFixedWidth(42)
         self.btn_next.setToolTip("同じフォルダの次のファイル")
         self.btn_next.clicked.connect(self.open_next_file)
 
-        self.btn_play = QPushButton("▶")
+        self.btn_play = QPushButton()
+        self.btn_play.setIcon(_media_icon("play"))
+        self.btn_play.setIconSize(QSize(16, 16))
         self.btn_play.setFixedWidth(44)
         self.btn_play.clicked.connect(self.toggle_play)
 
@@ -385,7 +423,7 @@ class MediaPlayerWidget(QWidget):
 
     def _on_playback_state(self, state):
         playing = state == QMediaPlayer.PlaybackState.PlayingState
-        self.btn_play.setText("⏸" if playing else "▶")
+        self.btn_play.setIcon(_media_icon("pause" if playing else "play"))
         self.playing_changed.emit(playing)
 
     def _on_slider_moved(self, value: int):
