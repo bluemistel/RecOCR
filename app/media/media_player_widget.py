@@ -87,7 +87,9 @@ class VideoDisplay(QWidget):
 
 
 def _media_icon(kind: str) -> QIcon:
-    """再生操作ボタンのアイコンを文字色で描く（kind: play / pause / prev / next）。
+    """再生操作ボタンのアイコンを文字色で描く。
+
+    kind: play / pause / prev / next / volume / mute
 
     「⏸」「◀」などの記号文字は Windows ではカラー絵文字（青い四角など）で
     表示されてしまうため、テーマの文字色で自前描画する。
@@ -114,6 +116,23 @@ def _media_icon(kind: str) -> QIcon:
         # 右向き三角＋縦棒（次のファイル）
         p.drawPolygon(QPolygonF([QPointF(8, 8), QPointF(21, 16), QPointF(8, 24)]))
         p.drawRect(QRectF(22, 8, 3, 16))
+    elif kind in ("volume", "mute"):
+        # スピーカー（四角＋台形）。ミュート時は×印を添える
+        p.drawRect(QRectF(5, 12, 5, 8))
+        p.drawPolygon(QPolygonF([QPointF(10, 12), QPointF(16, 7),
+                                 QPointF(16, 25), QPointF(10, 20)]))
+        pen = QPen(QColor(theme.TEXT))
+        pen.setWidthF(2.2)
+        pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+        p.setPen(pen)
+        if kind == "mute":
+            p.drawLine(QPointF(20, 12), QPointF(27, 20))
+            p.drawLine(QPointF(27, 12), QPointF(20, 20))
+        else:
+            # 音が出ている様子の弧2本
+            p.setBrush(Qt.BrushStyle.NoBrush)
+            p.drawArc(QRectF(13, 11, 9, 10), -60 * 16, 120 * 16)
+            p.drawArc(QRectF(11, 7, 16, 18), -60 * 16, 120 * 16)
     p.end()
     return QIcon(pm)
 
@@ -208,7 +227,9 @@ class MediaPlayerWidget(QWidget):
         self.speed_combo.currentIndexChanged.connect(self._on_speed_changed)
 
         # 音量（アイコンでミュート切替、バーで音量調整）
-        self.btn_mute = QPushButton("🔊")
+        self.btn_mute = QPushButton()
+        self.btn_mute.setIcon(_media_icon("volume"))
+        self.btn_mute.setIconSize(QSize(16, 16))
         self.btn_mute.setFixedWidth(44)
         self.btn_mute.setToolTip("クリックでミュート切替")
         self.btn_mute.clicked.connect(self.toggle_mute)
@@ -341,7 +362,7 @@ class MediaPlayerWidget(QWidget):
 
     def _update_mute_icon(self):
         muted = self.audio.isMuted() or self.volume_slider.value() == 0
-        self.btn_mute.setText("🔇" if muted else "🔊")
+        self.btn_mute.setIcon(_media_icon("mute" if muted else "volume"))
 
     def _on_speed_changed(self, _idx: int):
         rate = float(self.speed_combo.currentData() or 1.0)
