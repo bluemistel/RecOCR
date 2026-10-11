@@ -11,7 +11,7 @@ import json
 from PySide6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
                                QPushButton, QLabel, QGroupBox, QRadioButton,
                                QButtonGroup, QTabWidget, QFileDialog, QMessageBox,
-                               QLineEdit, QApplication, QSplitter)
+                               QLineEdit, QApplication, QSplitter, QFrame)
 from PySide6.QtCore import Qt, QRect, Signal, QObject, QTimer, QEvent
 from PySide6.QtGui import QImage
 
@@ -253,6 +253,14 @@ class MainWindow(QMainWindow):
         export_row.addWidget(self.btn_txt)
         export_row.addWidget(self.btn_text_only)
         export_row.addWidget(self.btn_srt)
+        # ソートは書き出しではなくリスト操作なので、区切り線で分ける
+        divider = QFrame()
+        divider.setFrameShape(QFrame.Shape.VLine)
+        divider.setFixedWidth(1)
+        divider.setStyleSheet(f"color:{theme.BORDER_STRONG};")
+        export_row.addSpacing(4)
+        export_row.addWidget(divider)
+        export_row.addSpacing(4)
         export_row.addWidget(self.btn_sort)
         export_row.addStretch()
         right_layout.addLayout(export_row)
