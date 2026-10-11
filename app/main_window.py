@@ -43,6 +43,11 @@ EXPORT_TOOLTIP = """列の並び: 話者名, 台詞, [プリセット名]
 合成音声ソフトへの取り込み用のため、時刻は出力しません（時刻が必要な場合は SRT）。\n値はダブルクォートで囲みません。台詞に半角カンマがあると列がずれます。"""
 
 
+TEXT_ONLY_TOOLTIP = """台詞だけを1行1件で書き出します。
+話者名・プリセット名・時刻は出力しません。
+話者名のカンマ区切りに対応していない合成音声ソフト向けです。"""
+
+
 SRT_TOOLTIP = """動画から取り込んだ行（時刻あり）を字幕ファイルとして書き出します。
 終了時刻は次の台詞の開始時刻から自動で決めます。
 時刻を持たない行（デスクトップ/画像から取り込んだ行）は含まれません。"""
@@ -233,16 +238,20 @@ class MainWindow(QMainWindow):
         self.btn_txt = QPushButton("TXT エクスポート")
         for _b in (self.btn_csv, self.btn_txt):
             _b.setToolTip(EXPORT_TOOLTIP)
+        self.btn_text_only = QPushButton("台詞のみ TXT")
+        self.btn_text_only.setToolTip(TEXT_ONLY_TOOLTIP)
         self.btn_srt = QPushButton("SRT エクスポート")
         self.btn_srt.setToolTip(SRT_TOOLTIP)
         self.btn_sort = QPushButton("時刻順にソート")
         self.btn_sort.setToolTip("リストを時刻の昇順に並び替えます（確認あり）")
         self.btn_csv.clicked.connect(lambda: self._export("csv"))
         self.btn_txt.clicked.connect(lambda: self._export("txt"))
+        self.btn_text_only.clicked.connect(self._export_text_only)
         self.btn_srt.clicked.connect(self._export_srt)
         self.btn_sort.clicked.connect(self._sort_by_time)
         export_row.addWidget(self.btn_csv)
         export_row.addWidget(self.btn_txt)
+        export_row.addWidget(self.btn_text_only)
         export_row.addWidget(self.btn_srt)
         export_row.addWidget(self.btn_sort)
         export_row.addStretch()
@@ -808,6 +817,26 @@ class MainWindow(QMainWindow):
                 msg += (f"\n\n注意: 半角カンマを含む行が {broken} 件あります。"
                         "取り込み側で列がずれる場合は、その行のカンマを"
                         "全角（、）に置き換えてください。")
+            QMessageBox.information(self, "エクスポート完了", msg)
+        except Exception as e:
+            QMessageBox.critical(self, "エラー", f"保存に失敗しました: {e}")
+
+    def _export_text_only(self):
+        """台詞だけを TXT として書き出す（話者名・プリセット名なし）。"""
+        rows = self.table.to_rows()
+        if not rows:
+            QMessageBox.warning(self, "エラー", "エクスポートするデータがありません。")
+            return
+        path, _ = QFileDialog.getSaveFileName(
+            self, "名前を付けて保存", "export_text.txt", "テキストファイル (*.txt)")
+        if not path:
+            return
+        try:
+            count = exporter.export_text_only(rows, path)
+            msg = f"{path} に保存しました。（{count}件）"
+            skipped = len(rows) - count
+            if skipped:
+                msg += f"\n台詞が空の {skipped} 行は含まれていません。"
             QMessageBox.information(self, "エクスポート完了", msg)
         except Exception as e:
             QMessageBox.critical(self, "エラー", f"保存に失敗しました: {e}")

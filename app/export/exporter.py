@@ -70,6 +70,21 @@ def export(rows: list[TranscriptRow], path: str, fmt: str,
             f.write(",".join(values) + "\n")
 
 
+def export_text_only(rows: list[TranscriptRow], path: str) -> int:
+    """台詞だけを1行1件で書き出し、書き出した件数を返す。
+
+    話者名のカンマ区切りに対応していない合成音声ソフト向け。
+    話者名・プリセット名・時刻は出力しない。
+    空の台詞は行がずれるだけなので飛ばす。
+    """
+    texts = [(row.text or "").strip() for row in rows]
+    texts = [t for t in texts if t]
+    with open(path, "w", encoding="utf-8", newline="") as f:
+        for text in texts:
+            f.write(text + "\n")
+    return len(texts)
+
+
 def format_srt_time(ms: int) -> str:
     """SRT の時刻表記 HH:MM:SS,mmm へ。"""
     ms = max(0, int(ms))
